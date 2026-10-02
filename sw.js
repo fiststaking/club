@@ -24,10 +24,11 @@ const POLICY = Object.freeze({
   // 当前已回填第 ⑪ 代 index.html（核心地址第⑪代正式版 + 空投质押 0x1f4aC8D2…a506〔7 天周期〕
   // + OSK/FIST 质押 3 倍出局进度条 + 国库 convertFistdaoFeeToOskLp 任何人可调用按钮
   // 〔滑点固定 1500 bp〕+ 修正 1 FIST/1 OSK 兑换方向倒置 + 刷新频率改 60s
-  // + 白名单仅保留 fiststaking.github.io，2026-09-28）的 SHA-256
+  // + 各 Tab 均设操作日志框（修复空投 Tab 操作无日志）+ 复投到期/授权前置校验
+  // + 白名单仅保留 fiststaking.github.io，2026-10-02）的 SHA-256
   // （base64，先剥离 Cloudflare beacon 注入）。
   // index.html 每次定稿后须重算此值，否则页面会被判为篡改并 403。
-  PINNED_HTML_HASHES: Object.freeze(['4l+F+fqo6xoTMqkM3iGmcs1J12oCyHRQdmw69Q9uxos=']),
+  PINNED_HTML_HASHES: Object.freeze(['OHjtiIrkmY4rsNhqg1Dksnkl+5TvEjpCIW4RaFghf6Y=']),
   // How often to check for SW updates (seconds)
   UPDATE_CHECK_INTERVAL_SEC: 20
 });
