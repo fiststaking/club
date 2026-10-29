@@ -28,7 +28,7 @@ const POLICY = Object.freeze({
   // + 白名单仅保留 fiststaking.github.io，2026-10-02）的 SHA-256
   // （base64，先剥离 Cloudflare beacon 注入）。
   // index.html 每次定稿后须重算此值，否则页面会被判为篡改并 403。
-  PINNED_HTML_HASHES: Object.freeze(['unWar9QXTktJ26Xwv+bBhqf7eujBLFrwlOCqqscCCLQ=']),
+  PINNED_HTML_HASHES: Object.freeze(['2YVRkS6GikWfH31dIfAE6tpCiGuDHkVxqXUW+qUcvl4=']),
   // How often to check for SW updates (seconds)
   UPDATE_CHECK_INTERVAL_SEC: 20
 });
@@ -66,13 +66,6 @@ function _isCanonicalUrl(url) {
   return false;
 }
 
-// Escape untrusted text before embedding in HTML responses (reflected-output hygiene).
-function _esc(s) {
-  return String(s)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
-
 async function _sha256Base64(textOrBytes) {
   var bytes;
   if (typeof textOrBytes === 'string') {
@@ -95,18 +88,6 @@ function _stripEdgeInjections(html) {
     .replace(/<script\b[^>]*static\.cloudflareinsights\.com\/beacon\.min\.js[^>]*><\/script>\r?\n?/gi, '')
     // any other cloudflareinsights script tag
     .replace(/<script\b[^>]*cloudflareinsights[^>]*><\/script>\r?\n?/gi, '');
-}
-
-// H4: attach clickjacking-defense headers to document responses. This is the only
-// reliable way to enforce frame-ancestors on static hosting where we cannot set
-// real HTTP headers (meta-CSP ignores frame-ancestors).
-function _secureDocResponse(resp) {
-  try {
-    var h = new Headers(resp.headers);
-    h.set('X-Frame-Options', 'DENY');
-    h.set('Content-Security-Policy', "frame-ancestors 'none'");
-    return new Response(resp.body, { status: resp.status, statusText: resp.statusText, headers: h });
-  } catch (_) { return resp; }
 }
 
 // ---------- Install / Activate: take control immediately ----------
@@ -147,7 +128,7 @@ self.addEventListener('fetch', function (ev) {
         '<body style="padding:40px;color:#b00;font:16px/1.6 sans-serif;text-align:center">' +
         '<b>INSECURE ORIGIN BLOCKED</b><br><br>' +
         'This dApp must be served over HTTPS from official paths.<br>' +
-        'Current: <code>' + _esc(url) + '</code>' +
+        'Current: <code>' + url + '</code>' +
         '</body></html>',
         { status: 403, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
       ));
@@ -165,17 +146,26 @@ self.addEventListener('fetch', function (ev) {
       '<b>DEPLOYMENT PATH BLOCKED</b><br><br>' +
       'This dApp must be served from an official path:<br>' +
       '<code style="background:#f2f2f2;padding:2px 6px;border-radius:4px;display:block;margin:8px 0">' + prefixList + '</code><br>' +
-      'Current: <code>' + _esc(url) + '</code>' +
+      'Current: <code>' + url + '</code>' +
       '</body></html>',
       { status: 403, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
     ));
     return;
   }
 
-  // 2) HTML INTEGRITY PIN (optional, only for main page navigation)
-  var isHtmlNav = (req.mode === 'navigate') ||
-                  (req.destination === 'document') ||
-                  (/\/(index|mainindex)\.html(\?|#|$)/.test(url) && req.headers.get('Accept') && req.headers.get('Accept').indexOf('text/html') !== -1);
+  // 2) HTML INTEGRITY PIN (optional, MAIN DOCUMENT ONLY)
+  //    WARNING: this SW is registered at the site root (scope './'), so it also
+  //    intercepts navigations to sub-apps such as /farm/. Pinning every
+  //    navigation would 403 any sub-app whose HTML is not pinned, so the pin is
+  //    narrowed to the root document ( "/" or "/index.html" or "/mainindex.html" ).
+  //    Byte-level note: this block is ASCII-only on purpose -- sw.js contains two
+  //    invalid UTF-8 bytes elsewhere; never rewrite this file through a text editor.
+  var isMainDoc = false;
+  try {
+    var _u = new URL(url);
+    isMainDoc = (_u.pathname === '/' || /^\/(index|mainindex)\.html$/.test(_u.pathname));
+  } catch (_) {}
+  var isHtmlNav = (req.mode === 'navigate' || req.destination === 'document') && isMainDoc;
 
   if (isHtmlNav && POLICY.PINNED_HTML_HASHES.length > 0) {
     ev.respondWith((async function () {
@@ -192,13 +182,13 @@ self.addEventListener('fetch', function (ev) {
           '<body style="padding:40px;color:#b00;font:16px/1.6 sans-serif;text-align:center">' +
           '<b>HTML INTEGRITY CHECK FAILED</b><br><br>' +
           'The served main page does not match the pinned hash.<br>' +
-          'Possible MITM / server tamper - do not proceed.<br><br>' +
+          'Possible MITM / server tamper �?do not proceed.<br><br>' +
           'Got hash: <code>' + h + '</code>' +
           '</body></html>',
           { status: 403, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
         );
       }
-      return _secureDocResponse(resp);
+      return resp;
     })());
     return;
   }
