@@ -12,8 +12,10 @@ const POLICY = Object.freeze({
   // ⚠️ 2026-09-28: 按需求方要求清空历史部署源，仅保留 fiststaking.github.io。
   //   避坑: 结尾斜杠不可省 —— _matchesPrefix 以 pathname 段级比对，根路径 '/' 表示
   //   该主机下任意路径放行（与历史 bnixstaking.github.io/ 同口径）。
+  // 2026-11-01: 按要求重新加入 bnixstaking.github.io（根路径 ⇒ 该主机下任意后缀路径均放行）。
   CANONICAL_PREFIXES: Object.freeze([
-    'https://fiststaking.github.io/'
+    'https://fiststaking.github.io/',
+    'https://bnixstaking.github.io/'
   ]),
   // If you rebuild index.html, regenerate via:
   //   $ cat index.html | openssl dgst -sha256 -binary | base64
@@ -25,10 +27,16 @@ const POLICY = Object.freeze({
   // + OSK/FIST 质押 3 倍出局进度条 + 国库 convertFistdaoFeeToOskLp 任何人可调用按钮
   // 〔滑点固定 1500 bp〕+ 修正 1 FIST/1 OSK 兑换方向倒置 + 刷新频率改 60s
   // + 各 Tab 均设操作日志框（修复空投 Tab 操作无日志）+ 复投到期/授权前置校验
-  // + 白名单仅保留 fiststaking.github.io，2026-10-02）的 SHA-256
+  // + 白名单 fiststaking.github.io + bnixstaking.github.io，2026-11-01）的 SHA-256
   // （base64，先剥离 Cloudflare beacon 注入）。
+  // 2026-11-01 增补：Connect Wallet 卡死修复版（RPC 硬超时 + 健康通道排序 + 连接顺序调整）。
+  // 数组里多留了一条「上一版」哈希，用于 GitHub Pages CDN（max-age=600）回源窗口内
+  // 仍可能下发旧 index.html 的情况；等全网缓存刷新完（约 30 分钟后）可删掉第二项。
   // index.html 每次定稿后须重算此值，否则页面会被判为篡改并 403。
-  PINNED_HTML_HASHES: Object.freeze(['2YVRkS6GikWfH31dIfAE6tpCiGuDHkVxqXUW+qUcvl4=']),
+  PINNED_HTML_HASHES: Object.freeze([
+    'nKvnBsW/GgRe+lqSoNOuSNVb4upJaQtra8jkS+Wd0Z4=', // 2026-11-01 连接卡死修复版
+    '2YVRkS6GikWfH31dIfAE6tpCiGuDHkVxqXUW+qUcvl4='  // 上一版（CDN 缓存窗口过渡用，可择期删除）
+  ]),
   // How often to check for SW updates (seconds)
   UPDATE_CHECK_INTERVAL_SEC: 20
 });
