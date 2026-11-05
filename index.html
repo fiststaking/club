@@ -206,7 +206,6 @@ button.farm-link:hover:not(:disabled){background:#0d9488}
       <option value="-1">Active</option>
     </select>
     <button class="g" onclick="claimYield()" id="btnClaim" aria-label="领取收益">-</button>
-    <button class="o" onclick="redeem()" id="btnRedeem" aria-label="赎回本金">-</button>
   </div>
   <div class="sub mt8" id="posDetail"></div>
 </div>
@@ -1146,7 +1145,7 @@ function applyT() {
   document.title = tr('title');
   const allKeys = 'title,level,vdc,ref,myInv,teamUsd,dirUsd,pendD,pendT,earnStk,farmYield,teamStkBinXUsd,teamStkBNIUsd,dirAddr,dirFarmInv,dirStkDirBinX,dirStkTeamBinX,dirOwnStkBinX,dirOwnStkBNI,dirStkDirBNI,dirStkTeamBNI,dirFarmDir,dirFarmTeam,_3x,cap,rel,rem,farm,dep,claim,redeem,stk,stkA,stkB,approve,stakeA,stakeB,fuelHint,fuelHintA,fuelHintB,orders,ordersA,ordersB,pools,pA,pAUsd,pB,pBUsd,dir,log,noDir,active,copied,fail,tabFarm,tabAStake,tabBStake,tabPool,disconnected,pendingY,tabFdStake,fdPool,fdCycle,fdRate,fdPoolBal,fdBal,fdAllow,fdMyOrder,fdReinvest,fdTiers,fdMultiplier,fdEarned,fdCap,fdProgress,x3Osk,x3Fist,x3Earned,x3EarnedB,x3Thresh,x3ThreshB,x3Pct,x3PctB,treas,trFee,trSlip,trPair,trIns,trHint';
   allKeys.split(',').forEach(k=>{const e=document.getElementById('t_'+k);if(e)e.textContent=tr(k)});
-  const btnMap={btnDep:'dep',btnDepFist:'depFist',btnApproveFist:'approveFist',btnClaim:'claim',btnRedeem:'redeem',btnApproveA:'approve',btnApproveB:'approve',btnSA:'stakeA',btnSB:'stakeB',btnFdApprove:'fdApprove',btnFdReinvest:'fdDoReinvest',btnTrConvert:'trConvert'};
+  const btnMap={btnDep:'dep',btnDepFist:'depFist',btnApproveFist:'approveFist',btnClaim:'claim',btnApproveA:'approve',btnApproveB:'approve',btnSA:'stakeA',btnSB:'stakeB',btnFdApprove:'fdApprove',btnFdReinvest:'fdDoReinvest',btnTrConvert:'trConvert'};
   Object.entries(btnMap).forEach(([id,k])=>{const el=document.getElementById(id);if(el&&!el.classList.contains('tx-pending'))el.textContent=tr(k)});
   const hint = document.getElementById('fdHint'); if (hint) hint.textContent = tr('fdHint');
   // 通用 i18n 扫描：任何带 data-i18n 的元素都按其键取词（用于各 Tab 复用同一日志标题等）
@@ -1613,7 +1612,7 @@ async function verifySWHash() {
 }
 
 // ⚠️ 每次改动 sw.js 都要 bump 这个版本串，否则浏览器可能沿用旧 SW 缓存。
-const SW_REGISTER_URL = 'sw.js?v=BNIX-20261101-2';
+const SW_REGISTER_URL = 'sw.js?v=BNIX-20261105-1';
 
 async function registerSecureSW() {
   if (!('serviceWorker' in navigator)) return false;
@@ -1718,13 +1717,20 @@ const BSC_PARAMS = {
 function _setConnectBtn(mode, label) {
   const btn = $('btnConnect'); if (!btn) return;
   if (mode === 'pending') {
-    if (!btn._origText) btn._origText = btn.textContent;
+    // ⚠️ 用独立标志判断「是否已保存原文案」而不是判断字符串真假：
+    //   按钮文案为空串时（图标按钮 / i18n 尚未应用）旧写法会把 "连接中…" 当成原文案存下来，
+    //   于是断开钱包后按钮永久显示 "校验合约…"。
+    if (!btn._origTextSaved) { btn._origText = btn.textContent; btn._origTextSaved = true; }
     btn.textContent = label || '连接中…';
     btn.disabled = true;
     btn.style.opacity = '0.7';
     btn.style.cursor = 'wait';
   } else {
-    if (btn._origText) { btn.textContent = btn._origText; delete btn._origText; }
+    if (btn._origTextSaved) {
+      btn.textContent = btn._origText;
+      delete btn._origText;
+      delete btn._origTextSaved;
+    }
     btn.disabled = false;
     btn.style.opacity = '';
     btn.style.cursor = '';
@@ -2136,7 +2142,8 @@ function disconnect() {
   // Show connect card
   $('app').style.display = 'none';
   $('connectCard').style.display = '';
-  $('btnConnect').disabled = false;
+  // 用统一入口复位按钮（含文案/透明度/光标），避免残留「校验合约…」这类中间态文案
+  _setConnectBtn('reset');
   $('connDot').classList.add('off');
   toast(TR('disconnected'), 'ok');
 }
@@ -4951,22 +4958,6 @@ async function claimYield() {
       fallbackGas: 400000
     });
     resetBtn('btnClaim');
-  });
-}
-
-async function redeem() {
-  await withTxLock(async () => {
-    const pid = Math.max(0, parseInt($('posSel').value));
-    setBtnPending('btnRedeem');
-    const vault = getCVAULT();
-    const data = V.interface.encodeFunctionData('redeemPrincipal', [pid]);
-    await _sendTxWithGuard({
-      to: vault, data,
-      label: 'Redeem Principal #' + pid,
-      detail: '',
-      fallbackGas: 400000
-    });
-    resetBtn('btnRedeem');
   });
 }
 

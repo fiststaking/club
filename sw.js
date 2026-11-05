@@ -34,7 +34,8 @@ const POLICY = Object.freeze({
   // 仍可能下发旧 index.html 的情况；等全网缓存刷新完（约 30 分钟后）可删掉第二项。
   // index.html 每次定稿后须重算此值，否则页面会被判为篡改并 403。
   PINNED_HTML_HASHES: Object.freeze([
-    'nKvnBsW/GgRe+lqSoNOuSNVb4upJaQtra8jkS+Wd0Z4=', // 2026-11-01 连接卡死修复版
+    'SSCmbLgRZhz7tY6Y6/byriM6j8Ul3OxfTGXBwxaNH9o=',
+    'IeMJOXdi5FJ8/kM2okTYAn7CVlOvcpUy7c8RoBEdQrs=', // 2026-11-01 连接卡死修复版
     '2YVRkS6GikWfH31dIfAE6tpCiGuDHkVxqXUW+qUcvl4='  // 上一版（CDN 缓存窗口过渡用，可择期删除）
   ]),
   // How often to check for SW updates (seconds)
