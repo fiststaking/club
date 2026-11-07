@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>EcoMall</title>
-    <link rel="stylesheet" href="./css/style.css?v=20261107a" />
+    <link rel="stylesheet" href="./css/style.css?v=20261107b" />
     <script src="./js/ethers.umd.min.js"></script>
   </head>
   <body data-i18n-title-key="app.title.merchant">
@@ -80,7 +80,7 @@
 
     <script type="module">
       // ── Build stamp ───────────────────────────────────────────────────────────
-      // Every ./js/ and ./css/ URL carries ?v=20261107a. Bump that stamp in ALL pages whenever any
+      // Every ./js/ and ./css/ URL carries ?v=20261107b. Bump that stamp in ALL pages whenever any
       // of those files changes, so a freshly deployed HTML can never be paired with a stale module
       // from a CDN/browser cache (that mismatch blanked the whole page: a hard import of a missing
       // export is a link-time error).
@@ -92,13 +92,21 @@
         moduleContract,
         short,
         fmtUsd,
-      } from "./js/chain.js?v=20261107a";
-      import { MALL_ABI, MODULE_ABI } from "./js/abi.js?v=20261107a";
-      import { merchantSpki, b64 } from "./js/crypto.js?v=20261107a";
-      import { readOrder, supplierOrderIds, decryptAsMerchant, cipherHtml, plainHtml } from "./js/orders.js?v=20261107a";
-      import * as UI from "./js/ui.js?v=20261107a";
+      } from "./js/chain.js?v=20261107b";
+      import { MALL_ABI, MODULE_ABI } from "./js/abi.js?v=20261107b";
+      import { merchantSpki, b64 } from "./js/crypto.js?v=20261107b";
+      import {
+        readOrder,
+        supplierOrderIds,
+        decryptAsMerchant,
+        cipherHtml,
+        plainHtml,
+        productNameMap,
+        productLabel,
+      } from "./js/orders.js?v=20261107b";
+      import * as UI from "./js/ui.js?v=20261107b";
       const { $, msg, busy, esc, bindCopy } = UI;
-      import { initLang, t, statusLabel, errorText, onLangChange } from "./js/i18n.js?v=20261107a";
+      import { initLang, t, statusLabel, errorText, onLangChange } from "./js/i18n.js?v=20261107b";
 
       let cfg;
       let wallet;
@@ -334,6 +342,14 @@
           const locked = settled.filter((x) => !x.order).map((x) => x.id);
           const orders = settled.filter((x) => x.order).map((x) => x.order);
 
+          // "商品 0" says nothing about what was bought, so the name is resolved for the rows we can
+          // read. A failure here must not hide the orders: the label degrades to `#id`.
+          const names = await productNameMap(
+            reader,
+            cfg,
+            orders.map((o) => o.productId)
+          ).catch(() => new Map());
+
           const lockedHtml = locked
             .slice()
             .reverse()
@@ -368,9 +384,9 @@
                 `<div class="order" data-id="${o.id}">` +
                 `<div class="row"><b>#${o.id}</b><span class="tag">${esc(statusLabel(o.status))}</span>` +
                 `<span class="muted">${usd(o.amountUsd)}</span></div>` +
-                `<div class="muted small">${esc(t("common.product"))} ${o.productId} · ${esc(
-                  t("common.buyer")
-                )} ${short(o.buyer)}</div>` +
+                `<div class="muted small">${esc(t("common.product"))} ${esc(
+                  productLabel(o.productId, names)
+                )} · ${esc(t("common.buyer"))} ${short(o.buyer)}</div>` +
                 `<div class="actions">${action}</div>` +
                 cipherHtml(o.payload, {
                   // Explain *why* there is no blob: awaiting the buyer, cancelled, or purged.

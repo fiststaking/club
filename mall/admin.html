@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>EcoMall</title>
-    <link rel="stylesheet" href="./css/style.css?v=20261107a" />
+    <link rel="stylesheet" href="./css/style.css?v=20261107b" />
     <script src="./js/ethers.umd.min.js"></script>
   </head>
   <body data-i18n-title-key="app.title.admin">
@@ -84,7 +84,7 @@
 
     <script type="module">
       // ── Build stamp ───────────────────────────────────────────────────────────
-      // Every ./js/ and ./css/ URL carries ?v=20261107a. Bump that stamp in ALL pages whenever any
+      // Every ./js/ and ./css/ URL carries ?v=20261107b. Bump that stamp in ALL pages whenever any
       // of those files changes, so a freshly deployed HTML can never be paired with a stale module
       // from a CDN/browser cache (that mismatch blanked the whole page: a hard import of a missing
       // export is a link-time error).
@@ -95,13 +95,13 @@
         mallContract,
         short,
         fmtUsd,
-      } from "./js/chain.js?v=20261107a";
-      import { MALL_ABI } from "./js/abi.js?v=20261107a";
-      import { adminSpki, b64 } from "./js/crypto.js?v=20261107a";
-      import { readOrder, decryptAsAdmin, cipherHtml, plainHtml } from "./js/orders.js?v=20261107a";
-      import * as UI from "./js/ui.js?v=20261107a";
+      } from "./js/chain.js?v=20261107b";
+      import { MALL_ABI } from "./js/abi.js?v=20261107b";
+      import { adminSpki, b64 } from "./js/crypto.js?v=20261107b";
+      import { readOrder, decryptAsAdmin, cipherHtml, plainHtml } from "./js/orders.js?v=20261107b";
+      import * as UI from "./js/ui.js?v=20261107b";
       const { $, msg, busy, esc, bindCopy } = UI;
-      import { initLang, t, statusLabel, errorText, onLangChange } from "./js/i18n.js?v=20261107a";
+      import { initLang, t, statusLabel, errorText, onLangChange } from "./js/i18n.js?v=20261107b";
 
       let cfg;
       let wallet;

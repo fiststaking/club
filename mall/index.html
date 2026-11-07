@@ -4,8 +4,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>EcoMall</title>
-    <link rel="stylesheet" href="./css/style.css?v=20261107a" />
-    <link rel="stylesheet" href="./css/diag.css?v=20261107a" />
+    <link rel="stylesheet" href="./css/style.css?v=20261107b" />
+    <link rel="stylesheet" href="./css/diag.css?v=20261107b" />
     <script src="./js/ethers.umd.min.js"></script>
   </head>
   <body data-i18n-title-key="app.title.mall">
@@ -106,7 +106,7 @@
 
     <script type="module">
       // ── Build stamp ───────────────────────────────────────────────────────────
-      // Every ./js/ and ./css/ URL carries ?v=20261107a. Bump that stamp in ALL pages whenever any
+      // Every ./js/ and ./css/ URL carries ?v=20261107b. Bump that stamp in ALL pages whenever any
       // of those files changes, so a freshly deployed HTML can never be paired with a stale module
       // from a CDN/browser cache (that mismatch blanked the whole page: a hard import of a missing
       // export is a link-time error).
@@ -123,13 +123,21 @@
         short,
         fmtUsd,
         usdToToken,
-      } from "./js/chain.js?v=20261107a";
-      import { MALL_ABI, ERC20_ABI, REGISTRY_ABI } from "./js/abi.js?v=20261107a";
-      import { sealOrder, clearKeyCache } from "./js/crypto.js?v=20261107a";
-      import { readOrder, decryptAsBuyer, allUserOrders, cipherHtml, plainHtml } from "./js/orders.js?v=20261107a";
-      import * as UI from "./js/ui.js?v=20261107a";
+      } from "./js/chain.js?v=20261107b";
+      import { MALL_ABI, ERC20_ABI, REGISTRY_ABI } from "./js/abi.js?v=20261107b";
+      import { sealOrder, clearKeyCache } from "./js/crypto.js?v=20261107b";
+      import {
+        readOrder,
+        decryptAsBuyer,
+        allUserOrders,
+        cipherHtml,
+        plainHtml,
+        orderProductNames,
+        productLabel,
+      } from "./js/orders.js?v=20261107b";
+      import * as UI from "./js/ui.js?v=20261107b";
       const { $, msg, busy, esc, bindCopy, withTimeout } = UI;
-      import { initLang, t, statusLabel, errorText, onLangChange } from "./js/i18n.js?v=20261107a";
+      import { initLang, t, statusLabel, errorText, onLangChange } from "./js/i18n.js?v=20261107b";
 
       let cfg;
       let wallet;
@@ -706,6 +714,9 @@
             box.textContent = t("common.noOrders");
             return;
           }
+          // `getOrderInfo` only returns the product id; resolve the names so a row says what was
+          // bought. A lookup failure degrades to `#id` instead of hiding the order.
+          const namesByMall = await orderProductNames(reader, cfg, orders).catch(() => new Map());
           // The farming gate is a fraction of the order value (half, minus the tolerance), never the
           // order amount. Showing only "awaiting farming" next to "150 USD" reads as "needs 150
           // USD of farming", so the real requirement and the buyer's current credit are printed.
@@ -763,7 +774,13 @@
                 `<div class="row"><b>#${o.id}</b><span class="tag">${esc(statusLabel(o.status))}</span>` +
                 `<span class="muted">${usd(o.amountUsd)}</span></div>` +
                 `<div class="muted small">${esc(
-                  t("mall.orderMeta", { product: o.productId, supplier: short(o.supplier) })
+                  t("mall.orderMeta", {
+                  product: productLabel(
+                    o.productId,
+                    namesByMall.get(String(o.mall || cfg.mall).toLowerCase())
+                  ),
+                  supplier: short(o.supplier),
+                })
                 )}</div>` +
                 gateHtml +
                 `<div class="actions">` +
