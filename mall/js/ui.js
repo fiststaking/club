@@ -1,6 +1,6 @@
 // Shared DOM helpers. Deliberately tiny: no framework, no build step.
 
-import { t } from "./i18n.js";
+import { t, onLangChange } from "./i18n.js";
 
 export const $ = (id) => document.getElementById(id);
 
@@ -96,9 +96,42 @@ export function bindCopy(root = document) {
   });
 }
 
+/**
+ * Mounts the "back to the main site" pill, the same one the farm page shows.
+ *
+ * Built in JS rather than written into the markup so the label comes from the dictionaries: the
+ * i18n checker rejects any hard-coded CJK text in a page, and the label must follow the selected
+ * language. The default `../` works for both /club/mall/index.html and /club/mall/merchant.html,
+ * because the pages always live one level below the club root.
+ *
+ * Idempotent: calling it twice (a language switch re-runs boot in some flows) does not duplicate it.
+ */
+export function mountBackHome(href = "../") {
+  if (typeof document === "undefined") return null;
+  let a = document.getElementById("back-home");
+  if (!a) {
+    a = document.createElement("a");
+    a.id = "back-home";
+    a.href = href;
+    document.body.appendChild(a);
+  }
+  const label = () => {
+    const text = t("nav.backHome");
+    a.textContent = text;
+    a.setAttribute("aria-label", text);
+    a.title = text;
+  };
+  label();
+  // One listener per mount; the element is reused, so guard against stacking handlers.
+  if (a.dataset.i18nBound !== "1") {
+    a.dataset.i18nBound = "1";
+    onLangChange(label);
+  }
+  return a;
+}
+
 /** Persists the last connected account so the page can restore the view without a prompt. */
-export const store = {
-  get(k, fallback = "") {
+export const store = {  get(k, fallback = "") {
     try {
       return localStorage.getItem("ecomall." + k) ?? fallback;
     } catch {
