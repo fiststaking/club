@@ -116,7 +116,10 @@ export function mountBackHome(href = "../") {
     document.body.appendChild(a);
   }
   const label = () => {
-    const text = t("nav.backHome");
+    // A stale dictionary (cached before this key existed) returns the key itself; show a neutral
+    // label instead of "nav.backHome".
+    const raw = t("nav.backHome");
+    const text = !raw || raw === "nav.backHome" ? "← Home" : raw;
     a.textContent = text;
     a.setAttribute("aria-label", text);
     a.title = text;
@@ -131,7 +134,8 @@ export function mountBackHome(href = "../") {
 }
 
 /** Persists the last connected account so the page can restore the view without a prompt. */
-export const store = {  get(k, fallback = "") {
+export const store = {
+  get(k, fallback = "") {
     try {
       return localStorage.getItem("ecomall." + k) ?? fallback;
     } catch {
