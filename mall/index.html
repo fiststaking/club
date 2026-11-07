@@ -4,8 +4,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>EcoMall</title>
-    <link rel="stylesheet" href="./css/style.css" />
-    <link rel="stylesheet" href="./css/diag.css" />
+    <link rel="stylesheet" href="./css/style.css?v=20261107a" />
+    <link rel="stylesheet" href="./css/diag.css?v=20261107a" />
     <script src="./js/ethers.umd.min.js"></script>
   </head>
   <body data-i18n-title-key="app.title.mall">
@@ -105,6 +105,11 @@
     </main>
 
     <script type="module">
+      // ── Build stamp ───────────────────────────────────────────────────────────
+      // Every ./js/ and ./css/ URL carries ?v=20261107a. Bump that stamp in ALL pages whenever any
+      // of those files changes, so a freshly deployed HTML can never be paired with a stale module
+      // from a CDN/browser cache (that mismatch blanked the whole page: a hard import of a missing
+      // export is a link-time error).
       import {
         loadConfig,
         connectWallet,
@@ -118,12 +123,13 @@
         short,
         fmtUsd,
         usdToToken,
-      } from "./js/chain.js";
-      import { MALL_ABI, ERC20_ABI, REGISTRY_ABI } from "./js/abi.js";
-      import { sealOrder, clearKeyCache } from "./js/crypto.js";
-      import { readOrder, decryptAsBuyer, allUserOrders, cipherHtml, plainHtml } from "./js/orders.js";
-      import { $, msg, busy, esc, bindCopy, withTimeout, mountBackHome } from "./js/ui.js";
-      import { initLang, t, statusLabel, errorText, onLangChange } from "./js/i18n.js";
+      } from "./js/chain.js?v=20261107a";
+      import { MALL_ABI, ERC20_ABI, REGISTRY_ABI } from "./js/abi.js?v=20261107a";
+      import { sealOrder, clearKeyCache } from "./js/crypto.js?v=20261107a";
+      import { readOrder, decryptAsBuyer, allUserOrders, cipherHtml, plainHtml } from "./js/orders.js?v=20261107a";
+      import * as UI from "./js/ui.js?v=20261107a";
+      const { $, msg, busy, esc, bindCopy, withTimeout } = UI;
+      import { initLang, t, statusLabel, errorText, onLangChange } from "./js/i18n.js?v=20261107a";
 
       let cfg;
       let wallet;
@@ -140,7 +146,7 @@
 
       async function boot() {
         initLang();
-        mountBackHome();
+        UI.mountBackHome?.();
         try {
           cfg = await loadConfig();
           reader = await readProvider(cfg);
