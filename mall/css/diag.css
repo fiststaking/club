@@ -1,0 +1,45 @@
+/* Diagnostics panel + step log */
+.diag {
+  margin-top: 12px;
+  font-size: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #0e141b;
+}
+.diag summary {
+  cursor: pointer;
+  color: var(--muted);
+  user-select: none;
+}
+.diag summary:hover { color: var(--fg); }
+
+#buyLog {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  max-height: 220px;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.7;
+}
+#buyLog li { color: var(--muted); word-break: break-word; }
+#buyLog li.ok { color: var(--ok); }
+#buyLog li.err { color: var(--err); }
+#buyLog li.info { color: var(--muted); }
+
+.diagout {
+  margin: 8px 0 0;
+  padding: 10px;
+  max-height: 260px;
+  overflow: auto;
+  background: #0b1016;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: #8fb6d9;
+}
