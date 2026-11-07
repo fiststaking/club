@@ -6,6 +6,7 @@ export default {
   "nav.mall": "商城",
   "nav.merchant": "商家",
   "nav.admin": "管理员",
+    "nav.backHome": "← 返回主站",
   "common.lang": "语言",
   "common.wallet": "钱包",
   "common.connect": "连接钱包",

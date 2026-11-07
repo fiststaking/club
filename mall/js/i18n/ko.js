@@ -6,6 +6,7 @@ export default {
   "nav.mall": "스토어",
   "nav.merchant": "판매자",
   "nav.admin": "관리자",
+    "nav.backHome": "← 메인 사이트로",
   "common.lang": "언어",
   "common.wallet": "지갑",
   "common.connect": "지갑 연결",

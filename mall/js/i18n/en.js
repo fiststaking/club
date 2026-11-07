@@ -6,6 +6,7 @@ export default {
   "nav.mall": "Shop",
   "nav.merchant": "Merchant",
   "nav.admin": "Admin",
+    "nav.backHome": "← Back to main site",
   "common.lang": "Language",
   "common.wallet": "Wallet",
   "common.connect": "Connect wallet",

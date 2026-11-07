@@ -6,6 +6,7 @@ export default {
   "nav.mall": "स्टोर",
   "nav.merchant": "विक्रेता",
   "nav.admin": "प्रशासक",
+    "nav.backHome": "← मुख्य साइट पर",
   "common.lang": "भाषा",
   "common.wallet": "वॉलेट",
   "common.connect": "वॉलेट जोड़ें",

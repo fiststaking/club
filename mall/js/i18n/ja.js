@@ -6,6 +6,7 @@ export default {
   "nav.mall": "ショップ",
   "nav.merchant": "出品者",
   "nav.admin": "管理者",
+    "nav.backHome": "← メインサイトへ",
   "common.lang": "言語",
   "common.wallet": "ウォレット",
   "common.connect": "ウォレットを接続",

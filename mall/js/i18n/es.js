@@ -6,6 +6,7 @@ export default {
   "nav.mall": "Tienda",
   "nav.merchant": "Comerciante",
   "nav.admin": "Administrador",
+    "nav.backHome": "← Volver al sitio principal",
   "common.lang": "Idioma",
   "common.wallet": "Cartera",
   "common.connect": "Conectar cartera",
