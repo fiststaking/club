@@ -112,6 +112,9 @@
         mallContract,
         tokenContract,
         registryContract,
+        setCustomRpc,
+        customRpc,
+        rpcCandidates,
         short,
         fmtUsd,
         usdToToken,
@@ -140,8 +143,15 @@
         try {
           cfg = await loadConfig();
           reader = await readProvider(cfg);
-          await loadProducts();
-          const d = await tokenContract(reader, cfg, ERC20_ABI).decimals();
+          // Bound the first paint: with a dead RPC the page used to sit on "loading" with no error
+          // (ethers' own request timeout is 5 minutes). `reader` already fails over between the
+          // configured endpoints, so this only fires when every one of them is unusable.
+          await withTimeout(loadProducts(), 20_000, "products");
+          const d = await withTimeout(
+            tokenContract(reader, cfg, ERC20_ABI).decimals(),
+            15_000,
+            "decimals"
+          );
           $("token").textContent = `${cfg.paymentToken.slice(0, 10)}… (${t("wallet.decimals", { n: d })})`;
 
           // Fail loudly at load time when encryption is impossible, instead of at signature time.
@@ -153,6 +163,7 @@
           }
         } catch (e) {
           msg("walletMsg", t("common.initFailed") + errorText(e), "err");
+          logLine("init: " + describe(e), "err");
         }
       }
 
@@ -854,9 +865,16 @@
 
       $("connect").onclick = connect;
       $("refresh").onclick = async () => {
-        await loadProducts();
-        await refreshBalance();
-        await loadMyOrders();
+        // Re-boot when the first load failed (e.g. every RPC was down): a bare loadProducts() would
+        // throw on the missing provider and leave the page stuck.
+        if (!cfg || !reader) return boot();
+        try {
+          await loadProducts();
+          await refreshBalance();
+          await loadMyOrders();
+        } catch (e) {
+          msg("walletMsg", t("common.initFailed") + errorText(e), "err");
+        }
       };
       $("tier").onchange = loadProductsForTier;
       $("buy").onclick = buy;
@@ -870,6 +888,22 @@
       });
 
       globalThis.addEventListener?.("ecomall:disconnect", () => clearKeyCache());
+
+      // Support escape hatch. If every configured endpoint is blocked on a user's network, running
+      //   ecomall.setRpc("https://their-rpc.example")
+      // in the console switches the read provider and reloads. `ecomall.rpcs()` lists the candidates.
+      globalThis.ecomall = {
+        setRpc(url) {
+          setCustomRpc(url);
+          location.reload();
+        },
+        rpc() {
+          return customRpc() || (cfg && cfg.rpcUrl) || "";
+        },
+        rpcs() {
+          return cfg ? rpcCandidates(cfg) : [];
+        },
+      };
 
       boot();
     </script>

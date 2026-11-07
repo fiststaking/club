@@ -5,5 +5,12 @@
   "merchantModule": "0x16e3339370a4E47626189439D353d831E17dcD9a",
   "paymentToken": "0x55d398326f99059fF775485246999027B3197955",
   "explorer": "https://bscscan.com",
-  "rpcUrl": "https://bsc.blockrazor.xyz"
+  "rpcUrl": "https://bsc.blockrazor.xyz",
+  "rpcUrls": [
+    "https://bsc.blockrazor.xyz",
+    "https://bsc-dataseed.bnbchain.org",
+    "https://bsc.nodereal.io",
+    "https://bsc-rpc.publicnode.com",
+    "https://1rpc.io/bnb"
+  ]
 }
