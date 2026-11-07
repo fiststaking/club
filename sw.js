@@ -34,10 +34,10 @@ const POLICY = Object.freeze({
   // 仍可能下发旧 index.html 的情况；等全网缓存刷新完（约 30 分钟后）可删掉第二项。
   // index.html 每次定稿后须重算此值，否则页面会被判为篡改并 403。
   PINNED_HTML_HASHES: Object.freeze([
-    'LUDvuFpz264+WcaA4EeddQVWM5IdGH14rBkLJbc4Ib8=', // 2026-11-07 生态商城入口（顶部一键进入 ./mall/）
-    'lRlTXethO8gBMmpdSt6tuPs9iZfwTN4Umb3QNYOKtQE=', // 2026-11-07 下单修复版（CDN 回源过渡用）
-    'SSCmbLgRZhz7tY6Y6/byriM6j8Ul3OxfTGXBwxaNH9o=',
-    'IeMJOXdi5FJ8/kM2okTYAn7CVlOvcpUy7c8RoBEdQrs='  // 2026-11-01 连接卡死修复版
+    'D1Au3IzZ11cDNuqzPib3IbkottZSa0n1ULLSAjQ5coM=', // 2026-11-07 删除旧 Mall 卡片（仅保留顶部入口 ./mall/）
+    'LUDvuFpz264+WcaA4EeddQVWM5IdGH14rBkLJbc4Ib8=', // 2026-11-07 生态商城入口（CDN 回源过渡用）
+    'lRlTXethO8gBMmpdSt6tuPs9iZfwTN4Umb3QNYOKtQE=',
+    'SSCmbLgRZhz7tY6Y6/byriM6j8Ul3OxfTGXBwxaNH9o='
   ]),
   // How often to check for SW updates (seconds)
   UPDATE_CHECK_INTERVAL_SEC: 20
