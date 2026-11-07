@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>EcoMall</title>
+    <link rel="stylesheet" href="./css/style.css" />
+    <script src="./js/ethers.umd.min.js"></script>
+  </head>
+  <body data-i18n-title-key="app.title.admin">
+    <header>
+      <h1>EcoMall</h1>
+      <nav>
+        <a href="./index.html" data-i18n="nav.mall"></a>
+        <a href="./merchant.html" data-i18n="nav.merchant"></a>
+        <a href="./admin.html" aria-current="page" data-i18n="nav.admin"></a>
+      </nav>
+      <select id="lang" class="lang"></select>
+    </header>
+
+    <main>
+      <section class="card">
+        <h2 data-i18n="common.wallet"></h2>
+        <div class="actions">
+          <button id="connect" class="primary" data-i18n="common.connect"></button>
+          <button id="refresh" class="ghost" data-i18n="common.refresh"></button>
+        </div>
+        <div class="kv" style="margin-top: 12px">
+          <dt data-i18n="common.account"></dt><dd id="account" data-i18n="common.notConnected"></dd>
+          <dt data-i18n="adm.isAdmin"></dt><dd id="isAdmin">—</dd>
+          <dt data-i18n="adm.keyState"></dt><dd id="keyState">—</dd>
+          <dt data-i18n="adm.activeKeys"></dt><dd id="activeKeys">—</dd>
+        </div>
+        <div id="walletMsg" class="msg"></div>
+      </section>
+
+      <section class="card">
+        <h2 data-i18n="adm.keyTitle"></h2>
+        <p class="muted small" data-i18n="adm.keyHelp"></p>
+        <div class="actions">
+          <button id="registerKey" class="primary" data-i18n="adm.registerKey"></button>
+          <button id="revokeKey" class="danger ghost" data-i18n="adm.revokeKey"></button>
+        </div>
+        <div class="notice" data-i18n="adm.keyNotice"></div>
+        <div id="keyMsg" class="msg"></div>
+      </section>
+
+      <section class="card">
+        <h2 data-i18n="adm.orders"></h2>
+        <div class="actions" style="margin-top: 0">
+          <input id="orderId" data-i18n-placeholder="adm.orderIdPlaceholder" style="max-width: 320px" />
+          <button id="loadOne" class="ghost" data-i18n="adm.read"></button>
+          <button id="loadAll" class="ghost" data-i18n="adm.list"></button>
+        </div>
+        <div id="orders" class="muted small" style="margin-top: 12px" data-i18n="common.notConnected"></div>
+        <div id="ordersMsg" class="msg"></div>
+      </section>
+
+      <section class="card">
+        <h2 data-i18n="adm.purgeTitle"></h2>
+        <p class="muted small" data-i18n="adm.purgeHelp"></p>
+        <div class="grid2">
+          <div class="field">
+            <label for="purgeFrom" data-i18n="adm.purgeFrom"></label>
+            <input id="purgeFrom" type="number" min="0" placeholder="0" />
+          </div>
+          <div class="field">
+            <label for="purgeCount" data-i18n="adm.purgeCount"></label>
+            <input id="purgeCount" type="number" min="1" max="50" value="50" />
+          </div>
+        </div>
+        <div class="actions">
+          <button id="purgePayloads" class="ghost" data-i18n="adm.purgePayloads"></button>
+          <button id="purgeOrders" class="danger" data-i18n="adm.purgeOrders"></button>
+        </div>
+        <div class="notice">
+          <div data-i18n="adm.purgePayloadsNotice"></div>
+          <div style="margin-top: 6px" data-i18n="adm.purgeOrdersNotice"></div>
+        </div>
+        <div class="notice" data-i18n="adm.purgeGasNotice"></div>
+        <div id="purgeMsg" class="msg"></div>
+      </section>
+    </main>
+
+    <script type="module">
+      import {
+        loadConfig,
+        connectWallet,
+        readProvider,
+        mallContract,
+        short,
+        fmtUsd,
+      } from "./js/chain.js";
+      import { MALL_ABI } from "./js/abi.js";
+      import { adminSpki, b64 } from "./js/crypto.js";
+      import { readOrder, decryptAsAdmin, cipherHtml, plainHtml } from "./js/orders.js";
+      import { $, msg, busy, esc, bindCopy } from "./js/ui.js";
+      import { initLang, t, statusLabel, errorText, onLangChange } from "./js/i18n.js";
+
+      let cfg;
+      let wallet;
+      let reader;
+      let myKeyId = 0;
+      let myDeriveVersion = 0;
+
+      const usd = (v) => `${fmtUsd(v)} USD`;
+
+      async function boot() {
+        initLang();
+        try {
+          cfg = await loadConfig();
+          reader = await readProvider(cfg);
+        } catch (e) {
+          msg("walletMsg", t("common.initFailed") + errorText(e), "err");
+        }
+      }
+
+      async function connect() {
+        busy($("connect"), true, t("common.connecting"));
+        try {
+          wallet = await connectWallet(cfg);
+          $("account").textContent = short(wallet.account);
+          await refresh();
+          msg("walletMsg", t("common.connected"), "ok");
+        } catch (e) {
+          msg("walletMsg", errorText(e), "err");
+        } finally {
+          busy($("connect"), false);
+        }
+      }
+
+      async function refresh() {
+        if (!wallet) return;
+        const mall = mallContract(reader, cfg, MALL_ABI);
+
+        const isAdmin = await mall.isAdmin(wallet.account);
+        $("isAdmin").textContent = isAdmin ? t("common.yes") : t("common.no");
+
+        const active = await mall.getActiveAdminKeys();
+        $("activeKeys").textContent = `${active.length} / 5`;
+
+        myKeyId = Number(await mall.adminKeyOf(wallet.account));
+        if (myKeyId === 0) {
+          $("keyState").textContent = t("adm.notRegistered");
+          myDeriveVersion = Number(await mall.adminKeyDeriveVersion(wallet.account));
+        } else {
+          const [, , , revoked, deriveVersion, spki] = await mall.getAdminKey(myKeyId);
+          myDeriveVersion = Number(deriveVersion);
+          $("keyState").textContent = revoked
+            ? t("adm.revoked", { id: myKeyId })
+            : `id ${myKeyId} · ${b64(ethers.getBytes(spki)).slice(0, 16)}…`;
+        }
+
+        if (!isAdmin) {
+          $("orders").textContent = t("adm.notAdminRead");
+        }
+      }
+
+      async function registerKey() {
+        const btn = $("registerKey");
+        busy(btn, true, t("common.processing"));
+        try {
+          if (!wallet) throw new Error(t("common.pleaseConnect"));
+          const mall = mallContract(reader, cfg, MALL_ABI);
+          if (!(await mall.isAdmin(wallet.account))) throw new Error(t("common.notAdmin"));
+
+          // The contract stores deriveVersion from a per-account counter, so read it before signing.
+          const deriveVersion = Number(await mall.adminKeyDeriveVersion(wallet.account));
+
+          msg("keyMsg", t("common.confirmSignature"), "info");
+          const spki = await adminSpki({
+            signer: wallet.signer,
+            account: wallet.account,
+            deriveVersion,
+            chainId: cfg.chainId,
+            mall: cfg.mall,
+          });
+
+          msg("keyMsg", t("mer.confirmChain"), "info");
+          const write = mallContract(wallet.signer, cfg, MALL_ABI);
+          await (await write.registerAdminKey(ethers.hexlify(spki))).wait();
+
+          msg("keyMsg", t("adm.registered"), "ok");
+          await refresh();
+        } catch (e) {
+          msg("keyMsg", t("adm.registerFailed") + errorText(e), "err");
+        } finally {
+          busy(btn, false);
+        }
+      }
+
+      async function revokeKey() {
+        const btn = $("revokeKey");
+        busy(btn, true, t("common.processing"));
+        try {
+          if (!wallet) throw new Error(t("common.pleaseConnect"));
+          const write = mallContract(wallet.signer, cfg, MALL_ABI);
+          await (await write.revokeAdminKey()).wait();
+          msg("keyMsg", t("adm.revokeDone"), "ok");
+          await refresh();
+        } catch (e) {
+          msg("keyMsg", t("adm.revokeFailed") + errorText(e), "err");
+        } finally {
+          busy(btn, false);
+        }
+      }
+
+      function renderOrders(orders) {
+        const box = $("orders");
+        if (orders.length === 0) {
+          box.textContent = t("adm.noOrders");
+          return;
+        }
+        box.innerHTML = orders
+          .map(
+            (o) =>
+              `<div class="order" data-id="${o.id}">` +
+              `<div class="row"><b>#${o.id}</b><span class="tag">${esc(statusLabel(o.status))}</span>` +
+              `<span class="muted">${usd(o.amountUsd)}</span></div>` +
+              `<div class="muted small">${esc(
+                t("mall.orderMeta", { product: o.productId, supplier: short(o.supplier) })
+              )} · ${esc(t("common.buyer"))} ${short(o.buyer)}</div>` +
+              `<div class="actions"><button class="ghost" data-decrypt="${o.id}">${esc(
+                t("common.decrypt")
+              )}</button></div>` +
+              cipherHtml(o.payload) +
+              `<div class="out small"></div></div>`
+          )
+          .join("");
+        box.querySelectorAll("[data-decrypt]").forEach((b) => {
+          b.onclick = () => decrypt(Number(b.dataset.decrypt), b.closest(".order"));
+        });
+        bindCopy(box);
+      }
+
+      async function loadAll() {
+        try {
+          // `getOrdersPaged` is gated on msg.sender, so the call must come from the wallet.
+          const mall = mallContract(wallet.signer, cfg, MALL_ABI);
+          const total = Number(await mall.orderCount());
+          if (total === 0) {
+            $("orders").textContent = t("common.noOrders");
+            return;
+          }
+          const limit = Math.min(50, total);
+          const offset = Math.max(0, total - limit);
+          const [ids] = await mall.getOrdersPaged(offset, limit);
+          // allSettled, not all: a purged order reverts `getOrderInfo`, and one such id must not
+          // blank the whole dashboard.
+          const settled = await Promise.allSettled(
+            [...ids].map((id) => readOrder(wallet.signer, cfg, Number(id)))
+          );
+          const orders = settled.filter((r) => r.status === "fulfilled").map((r) => r.value);
+          if (orders.length === 0) {
+            $("orders").textContent = t("common.noOrders");
+            return;
+          }
+          renderOrders(orders.reverse());
+        } catch (e) {
+          msg("ordersMsg", t("common.readFailed") + errorText(e), "err");
+        }
+      }
+
+      async function loadOne() {
+        const raw = $("orderId").value.trim();
+        if (!raw) return loadAll();
+        try {
+          const order = await readOrder(wallet.signer, cfg, Number(raw));
+          renderOrders([order]);
+        } catch (e) {
+          msg("ordersMsg", t("common.readFailed") + errorText(e), "err");
+        }
+      }
+
+      async function decrypt(id, node) {
+        const out = node.querySelector(".out");
+        if (myKeyId === 0) {
+          out.textContent = t("adm.pleaseRegisterKey");
+          return;
+        }
+        out.textContent = t("common.confirmSignature");
+        try {
+          const order = await readOrder(wallet.signer, cfg, id);
+          if (!order.payload || order.payload === "0x") {
+            out.textContent = t("adm.noCipher");
+            return;
+          }
+          const rec = await decryptAsAdmin({
+            signer: wallet.signer,
+            account: wallet.account,
+            blob: order.payload,
+            order,
+            cfg,
+            keyId: myKeyId,
+            deriveVersion: myDeriveVersion,
+          });
+          out.innerHTML = plainHtml(rec);
+        } catch (e) {
+          out.textContent = t("common.decryptFailed") + errorText(e);
+        }
+      }
+
+      $("connect").onclick = connect;
+      $("refresh").onclick = refresh;
+      $("registerKey").onclick = registerKey;
+      $("revokeKey").onclick = revokeKey;
+
+      /**
+       * Clears a contiguous range of finished orders.
+       * `full = false` deletes only the ciphertext; `full = true` also zeroes the order record.
+       */
+      async function purgeRange(full) {
+        const btn = $(full ? "purgeOrders" : "purgePayloads");
+        busy(btn, true, t("adm.purging"));
+        try {
+          if (!wallet) throw new Error(t("common.pleaseConnect"));
+          const mall = mallContract(reader, cfg, MALL_ABI);
+          if (!(await mall.isAdmin(wallet.account))) throw new Error(t("common.notAdmin"));
+
+          const from = Number($("purgeFrom").value || 0);
+          const count = Number($("purgeCount").value || 50);
+          if (!Number.isInteger(from) || from < 0) throw new Error(t("adm.badFrom"));
+          if (!Number.isInteger(count) || count < 1) throw new Error(t("adm.badCount"));
+
+          const max = Number(await mall.MAX_PURGE_BATCH());
+          const n = Math.min(count, max);
+
+          const ids = [];
+          for (let i = 0; i < n; i++) ids.push(from + i);
+
+          const label = t(full ? "adm.purgeLabelFull" : "adm.purgeLabelPayloads");
+          msg(
+            "purgeMsg",
+            t("adm.purgeConfirm", { label, n, from, to: from + n - 1 }),
+            "info"
+          );
+
+          const write = mallContract(wallet.signer, cfg, MALL_ABI);
+          const tx = full ? await write.purgeOrders(ids) : await write.purgePayloads(ids);
+          const rc = await tx.wait();
+
+          msg(
+            "purgeMsg",
+            t("adm.purgeDone", {
+              label,
+              from,
+              to: from + n - 1,
+              hash: rc.hash.slice(0, 12),
+            }),
+            "ok"
+          );
+        } catch (e) {
+          msg("purgeMsg", t("adm.purgeFailed") + errorText(e), "err");
+        } finally {
+          busy(btn, false);
+        }
+      }
+
+      $("loadAll").onclick = loadAll;
+      $("loadOne").onclick = loadOne;
+      $("purgePayloads").onclick = () => purgeRange(false);
+      $("purgeOrders").onclick = () => purgeRange(true);
+
+      onLangChange(async () => {
+        if (!cfg) return;
+        if (wallet) await refresh();
+      });
+
+      boot();
+    </script>
+  </body>
+</html>

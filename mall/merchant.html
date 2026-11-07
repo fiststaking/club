@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>EcoMall</title>
+    <link rel="stylesheet" href="./css/style.css" />
+    <script src="./js/ethers.umd.min.js"></script>
+  </head>
+  <body data-i18n-title-key="app.title.merchant">
+    <header>
+      <h1>EcoMall</h1>
+      <nav>
+        <a href="./index.html" data-i18n="nav.mall"></a>
+        <a href="./merchant.html" aria-current="page" data-i18n="nav.merchant"></a>
+        <a href="./admin.html" data-i18n="nav.admin"></a>
+      </nav>
+      <select id="lang" class="lang"></select>
+    </header>
+
+    <main>
+      <section class="card">
+        <h2 data-i18n="common.wallet"></h2>
+        <div class="actions">
+          <button id="connect" class="primary" data-i18n="common.connect"></button>
+          <button id="refresh" class="ghost" data-i18n="common.refresh"></button>
+        </div>
+        <div class="kv" style="margin-top: 12px">
+          <dt data-i18n="common.account"></dt><dd id="account" data-i18n="common.notConnected"></dd>
+          <dt data-i18n="mer.isMerchant"></dt><dd id="isMerchant">—</dd>
+          <dt data-i18n="mer.keyVersion"></dt><dd id="keyVersion">—</dd>
+        </div>
+        <div id="walletMsg" class="msg"></div>
+      </section>
+
+      <section class="card">
+        <h2 data-i18n="mer.keyTitle"></h2>
+        <p class="muted small" data-i18n="mer.keyHelp"></p>
+        <div class="kv">
+          <dt data-i18n="mer.fingerprint"></dt><dd id="fingerprint">—</dd>
+        </div>
+        <div class="actions">
+          <button id="registerKey" class="primary" data-i18n="mer.registerKey"></button>
+        </div>
+        <div class="notice" data-i18n="mer.keyNotice"></div>
+        <div id="keyMsg" class="msg"></div>
+      </section>
+
+      <section class="card">
+        <h2 data-i18n="mer.listTitle"></h2>
+        <p class="muted small" data-i18n="mer.listHelp"></p>
+        <div class="grid2">
+          <div class="field">
+            <label for="newName" data-i18n="mer.name"></label>
+            <input id="newName" maxlength="80" />
+          </div>
+          <div class="field">
+            <label for="newPrice" data-i18n="mer.price"></label>
+            <input id="newPrice" type="number" min="150" max="30000" step="150" />
+          </div>
+        </div>
+        <div class="actions">
+          <button id="addProduct" class="primary" data-i18n="mer.submit"></button>
+        </div>
+        <div id="productMsg" class="msg"></div>
+      </section>
+
+      <section class="card">
+        <h2 data-i18n="mer.myProducts"></h2>
+        <div id="products" class="muted small" data-i18n="common.notConnected"></div>
+      </section>
+
+      <section class="card">
+        <h2 data-i18n="mer.myOrders"></h2>
+        <p class="muted small" data-i18n="mer.ordersHelp"></p>
+        <div id="orders" class="muted small" data-i18n="common.notConnected"></div>
+        <div id="ordersMsg" class="msg"></div>
+      </section>
+    </main>
+
+    <script type="module">
+      import {
+        loadConfig,
+        connectWallet,
+        readProvider,
+        mallContract,
+        moduleContract,
+        short,
+        fmtUsd,
+      } from "./js/chain.js";
+      import { MALL_ABI, MODULE_ABI } from "./js/abi.js";
+      import { merchantSpki, b64 } from "./js/crypto.js";
+      import { readOrder, supplierOrderIds, decryptAsMerchant, cipherHtml, plainHtml } from "./js/orders.js";
+      import { $, msg, busy, esc, bindCopy } from "./js/ui.js";
+      import { initLang, t, statusLabel, errorText, onLangChange } from "./js/i18n.js";
+
+      let cfg;
+      let wallet;
+      let reader;
+
+      const usd = (v) => `${fmtUsd(v)} USD`;
+
+      async function boot() {
+        initLang();
+        try {
+          cfg = await loadConfig();
+          reader = await readProvider(cfg);
+        } catch (e) {
+          msg("walletMsg", t("common.initFailed") + errorText(e), "err");
+        }
+      }
+
+      async function connect() {
+        busy($("connect"), true, t("common.connecting"));
+        try {
+          wallet = await connectWallet(cfg);
+          $("account").textContent = short(wallet.account);
+          await refresh();
+          msg("walletMsg", t("common.connected"), "ok");
+        } catch (e) {
+          msg("walletMsg", errorText(e), "err");
+        } finally {
+          busy($("connect"), false);
+        }
+      }
+
+      async function refresh() {
+        if (!wallet) return;
+        const module = moduleContract(reader, cfg, MODULE_ABI);
+        const mall = mallContract(reader, cfg, MALL_ABI);
+
+        const isMerchant = await module.isMerchant(wallet.account);
+        $("isMerchant").textContent = isMerchant ? t("mer.open") : t("mer.notOpen");
+
+        const version = Number(await mall.merchantKeyVersion(wallet.account));
+        $("keyVersion").textContent = version === 0 ? t("adm.notRegistered") : `v${version}`;
+
+        if (version > 0) {
+          const [, spki] = await mall.getCurrentMerchantKey(wallet.account);
+          $("fingerprint").textContent = b64(ethers.getBytes(spki)).slice(0, 22) + "…";
+        } else {
+          $("fingerprint").textContent = "—";
+        }
+
+        await loadProducts();
+        await loadOrders();
+      }
+
+      async function registerKey() {
+        const btn = $("registerKey");
+        busy(btn, true, t("common.processing"));
+        try {
+          if (!wallet) throw new Error(t("common.pleaseConnect"));
+          const module = moduleContract(reader, cfg, MODULE_ABI);
+          if (!(await module.isMerchant(wallet.account))) throw new Error(t("mer.notMerchant"));
+
+          const mall = mallContract(reader, cfg, MALL_ABI);
+          const current = Number(await mall.merchantKeyVersion(wallet.account));
+          // The contract stores deriveVersion == the new on-chain version, so sign for current + 1.
+          const deriveKeyId = current + 1;
+
+          msg("keyMsg", t("common.confirmSignature"), "info");
+          const spki = await merchantSpki({
+            signer: wallet.signer,
+            account: wallet.account,
+            keyId: deriveKeyId,
+            chainId: cfg.chainId,
+            mall: cfg.mall,
+          });
+
+          msg("keyMsg", t("mer.confirmChain"), "info");
+          const write = mallContract(wallet.signer, cfg, MALL_ABI);
+          await (await write.registerMerchantKey(ethers.hexlify(spki))).wait();
+
+          msg("keyMsg", t("mer.registered"), "ok");
+          await refresh();
+        } catch (e) {
+          msg("keyMsg", t("mer.registerFailed") + errorText(e), "err");
+        } finally {
+          busy(btn, false);
+        }
+      }
+
+      // ── products ──────────────────────────────────────────────
+
+      async function loadProducts() {
+        const box = $("products");
+        if (!wallet) return;
+        box.textContent = t("common.loading");
+        try {
+          const module = moduleContract(reader, cfg, MODULE_ABI);
+          const mall = mallContract(reader, cfg, MALL_ABI);
+          const count = Number(await module.getMerchantProductCount(wallet.account));
+          if (count === 0) {
+            box.textContent = t("mer.noProducts");
+            return;
+          }
+
+          const ids = await module.getMerchantProductsPaged(wallet.account, 0, 100);
+          const rows = [];
+          for (const raw of ids) {
+            const id = Number(raw);
+            const [name, amountUsd, , active] = await mall.getProductInfo(id);
+            rows.push({ id, name, amountUsd, active });
+          }
+
+          box.innerHTML = rows
+            .reverse()
+            .map(
+              (p) =>
+                `<div class="order" data-id="${p.id}">` +
+                `<div class="row"><b>#${p.id}</b>` +
+                `<span class="tag">${esc(p.active ? t("mer.onSale") : t("mer.offSale"))}</span>` +
+                `<span class="muted">${usd(p.amountUsd)}</span></div>` +
+                `<div class="muted small">${esc(p.name)}</div>` +
+                `<div class="actions">` +
+                `<input class="edit-name" value="${esc(p.name)}" maxlength="80" style="max-width:220px" />` +
+                `<input class="edit-price" type="number" min="150" max="30000" step="150" ` +
+                `value="${fmtUsd(p.amountUsd)}" style="max-width:130px" />` +
+                `<button class="ghost" data-save="${p.id}">${esc(t("mer.save"))}</button>` +
+                `<button class="ghost" data-toggle="${p.id}" data-active="${p.active}">` +
+                `${esc(p.active ? t("mer.delist") : t("mer.relist"))}</button>` +
+                `</div></div>`
+            )
+            .join("");
+
+          box.querySelectorAll("[data-save]").forEach((b) => {
+            b.onclick = () => saveProduct(Number(b.dataset.save), b.closest(".order"));
+          });
+          box.querySelectorAll("[data-toggle]").forEach((b) => {
+            b.onclick = () =>
+              toggleProduct(Number(b.dataset.toggle), b.dataset.active !== "true", b);
+          });
+        } catch (e) {
+          box.textContent = t("common.readFailed") + errorText(e);
+        }
+      }
+
+      function priceToUsd(raw) {
+        const n = Number(String(raw).trim());
+        if (!Number.isFinite(n)) throw new Error(t("mer.priceFormat"));
+        if (n < 150 || n > 30000) throw new Error(t("mer.priceRange"));
+        if (n % 150 !== 0) throw new Error(t("mer.priceStep"));
+        return ethers.parseUnits(String(n), 18);
+      }
+
+      async function addProduct() {
+        const btn = $("addProduct");
+        busy(btn, true, t("mer.listing"));
+        try {
+          if (!wallet) throw new Error(t("common.pleaseConnect"));
+          const name = $("newName").value.trim();
+          if (!name) throw new Error(t("mer.nameEmpty"));
+          const amountUsd = priceToUsd($("newPrice").value);
+
+          const write = moduleContract(wallet.signer, cfg, MODULE_ABI);
+          await (await write.addProduct(name, amountUsd)).wait();
+
+          $("newName").value = "";
+          $("newPrice").value = "";
+          msg("productMsg", t("mer.listed"), "ok");
+          await loadProducts();
+        } catch (e) {
+          msg("productMsg", t("mer.listFailed") + errorText(e), "err");
+        } finally {
+          busy(btn, false);
+        }
+      }
+
+      async function saveProduct(id, node) {
+        const name = node.querySelector(".edit-name").value.trim();
+        const price = node.querySelector(".edit-price").value;
+        try {
+          if (!name) throw new Error(t("mer.nameEmpty"));
+          const amountUsd = priceToUsd(price);
+          const write = moduleContract(wallet.signer, cfg, MODULE_ABI);
+          await (await write.updateProduct(id, name, amountUsd)).wait();
+          msg("productMsg", t("mer.updated", { id }), "ok");
+          await loadProducts();
+        } catch (e) {
+          msg("productMsg", t("mer.updateFailed") + errorText(e), "err");
+        }
+      }
+
+      async function toggleProduct(id, active, button) {
+        busy(button, true, t("common.processing"));
+        try {
+          const write = moduleContract(wallet.signer, cfg, MODULE_ABI);
+          await (await write.setProductActive(id, active)).wait();
+          msg(
+            "productMsg",
+            t("mer.toggleDone", { id, action: t(active ? "mer.actionOn" : "mer.actionOff") }),
+            "ok"
+          );
+          await loadProducts();
+        } catch (e) {
+          msg("productMsg", t("common.readFailed") + errorText(e), "err");
+          busy(button, false);
+        }
+      }
+
+      // ── orders ────────────────────────────────────────────────
+
+      async function loadOrders() {
+        const box = $("orders");
+        box.textContent = t("common.loading");
+        try {
+          const ids = await supplierOrderIds(reader, cfg, wallet.account);
+          if (ids.length === 0) {
+            box.textContent = t("common.noOrders");
+            return;
+          }
+
+          // `getOrderInfo` reverts for a supplier while the order is still AWAIT_FARM (the payload is
+          // gated on the buyer unlocking). Dropping those ids made the merchant see "no orders" for
+          // orders that really exist, so they are rendered as a locked row instead.
+          const settled = await Promise.all(
+            ids.map(async (id) => {
+              try {
+                return { order: await readOrder(wallet.signer, cfg, id), id: Number(id) };
+              } catch {
+                return { order: null, id: Number(id) };
+              }
+            })
+          );
+
+          const locked = settled.filter((x) => !x.order).map((x) => x.id);
+          const orders = settled.filter((x) => x.order).map((x) => x.order);
+
+          const lockedHtml = locked
+            .slice()
+            .reverse()
+            .map(
+              (id) =>
+                `<div class="order" data-id="${id}">` +
+                `<div class="row"><b>#${id}</b>` +
+                `<span class="tag">${esc(t("mer.buyerNotUnlocked"))}</span></div>` +
+                `<div class="muted small">${esc(t("mer.noPayload"))}</div>` +
+                `</div>`
+            )
+            .join("");
+
+          if (orders.length === 0 && locked.length === 0) {
+            box.textContent = t("common.noOrders");
+            return;
+          }
+
+          box.innerHTML = lockedHtml + orders
+            .slice()
+            .reverse()
+            .map((o) => {
+              // Status 4 is CANCELLED: the contract refuses the payload there, so offering a decrypt
+              // button would only produce an error.
+              const action =
+                o.status === 1 || o.status === 2 || o.status === 3
+                  ? `<button class="ghost" data-decrypt="${o.id}">${esc(t("mer.decryptInfo"))}</button>`
+                  : o.status === 4
+                    ? `<span class="muted small">${esc(t("common.canceled"))}</span>`
+                    : `<span class="muted small">${esc(t("mer.buyerNotUnlocked"))}</span>`;
+              return (
+                `<div class="order" data-id="${o.id}">` +
+                `<div class="row"><b>#${o.id}</b><span class="tag">${esc(statusLabel(o.status))}</span>` +
+                `<span class="muted">${usd(o.amountUsd)}</span></div>` +
+                `<div class="muted small">${esc(t("common.product"))} ${o.productId} · ${esc(
+                  t("common.buyer")
+                )} ${short(o.buyer)}</div>` +
+                `<div class="actions">${action}</div>` +
+                cipherHtml(o.payload, {
+                  // Explain *why* there is no blob: awaiting the buyer, cancelled, or purged.
+                  emptyKey:
+                    o.status === 0
+                      ? "mer.buyerNotUnlocked"
+                      : o.status === 4
+                        ? "common.canceled"
+                        : "cipher.empty",
+                }) +
+                `<div class="out small"></div></div>`
+              );
+            })
+            .join("");
+
+          box.querySelectorAll("[data-decrypt]").forEach((b) => {
+            b.onclick = () => decrypt(Number(b.dataset.decrypt), b.closest(".order"));
+          });
+          bindCopy(box);
+        } catch (e) {
+          box.textContent = t("common.readFailed") + errorText(e);
+        }
+      }
+
+      async function decrypt(id, node) {
+        const out = node.querySelector(".out");
+        out.textContent = t("common.confirmSignature");
+        try {
+          const order = await readOrder(wallet.signer, cfg, id);
+          if (!order.payload || order.payload === "0x") {
+            out.textContent = t("mer.noPayload");
+            return;
+          }
+          const rec = await decryptAsMerchant({
+            signer: wallet.signer,
+            account: wallet.account,
+            blob: order.payload,
+            order,
+            cfg,
+          });
+          out.innerHTML = plainHtml(rec);
+        } catch (e) {
+          out.textContent = t("common.decryptFailed") + errorText(e);
+        }
+      }
+
+      $("connect").onclick = connect;
+      $("refresh").onclick = refresh;
+      $("registerKey").onclick = registerKey;
+      $("addProduct").onclick = addProduct;
+
+      onLangChange(async () => {
+        if (!cfg) return;
+        if (wallet) await refresh();
+      });
+
+      boot();
+    </script>
+  </body>
+</html>

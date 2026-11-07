@@ -1,0 +1,9 @@
+{
+  "chainId": 56,
+  "mall": "0x8f5290FCda051f71122eD34cFc6e629517352093",
+  "registry": "0x6e41606736c57f47396FCa60a8068c3eA9f63025",
+  "merchantModule": "0x16e3339370a4E47626189439D353d831E17dcD9a",
+  "paymentToken": "0x55d398326f99059fF775485246999027B3197955",
+  "explorer": "https://bscscan.com",
+  "rpcUrl": "https://bsc.blockrazor.xyz"
+}
