@@ -52,6 +52,9 @@ td:first-child,th:first-child{text-align:left}
 /* 生态农场入口（B 方案：同源子页跳转 ./farm/） */
 button.farm-link{background:#0f766e;font-size:11px;padding:4px 8px;border-radius:5px}
 button.farm-link:hover:not(:disabled){background:#0d9488}
+/* 生态商城入口（与生态农场同款：同源子页跳转 ./mall/） */
+button.mall-link{background:#b45309;font-size:11px;padding:4px 8px;border-radius:5px}
+button.mall-link:hover:not(:disabled){background:#d97706}
 /* === Tabs === */
 .tab-nav{display:flex;gap:4px;margin:12px 0 8px}
 .tab-btn{flex:1;padding:9px 0;text-align:center;background:#1a2233;color:#94a3b8;border:none;border-radius:6px;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s}
@@ -100,6 +103,7 @@ button.farm-link:hover:not(:disabled){background:#0d9488}
 <h1>OSK Dual Linkage Engine <span class="addr" id="wAddr"></span></h1>
 <div class="header-right">
   <button class="farm-link" onclick="openFarm()" aria-label="生态农场" title="生态农场 · 链上农场游戏">生态农场</button>
+  <button class="mall-link" onclick="openMall()" data-i18n="entryMall" aria-label="生态商城" title="生态商城 · 链上商城（加密收货信息）">生态商城</button>
   <span class="conn-dot" id="connDot" title="已连接"></span>
   <select id="langSel" onchange="onLangChange()" aria-label="切换语言"><option value="zh">中文</option><option value="en">English</option><option value="hi">हिन्दी</option><option value="ja">日本語</option><option value="ko">한국어</option><option value="es">Español</option><option value="fr">Français</option><option value="de">Deutsch</option><option value="pt">Português</option></select>
   <button class="dc" onclick="disconnect()" aria-label="断开钱包" title="断开钱包">✕</button>
@@ -977,6 +981,10 @@ const T = {
   de:{title:'OSK Dual-Linkage-Engine',level:'Stufe',vdc:'VDC',ref:'Empfehler',myInv:'Farm Invest',teamUsd:'Farm Team',dirUsd:'Farm Direkt',pendD:'Direktverdienst',pendT:'Teamverdienst',earnStk:'Staking Gesamtertrag',farmYield:'Farm Ertrag OSK',teamStkBinXUsd:'Team Stake OSK USD',teamStkBNIUsd:'Team Stake FIST USD',dir:'Direktwerbungen',dirAddr:'Adresse',dirFarmInv:'Farm Invest',dirStkDirBinX:'Stk Direkt OSK(USD)',dirStkTeamBinX:'Stk Team OSK(USD)',dirOwnStkBinX:'Eigener Stake OSK',dirOwnStkBNI:'Eigener Stake FIST',dirStkDirBNI:'Stk Direkt FIST(USD)',dirStkTeamBNI:'Stk Team FIST(USD)',dirFarmDir:'Farm Direkt',dirFarmTeam:'Farm Team',_3x:'3x Punktzahl',cap:'Gesamt Cap',rel:'Freigegeben',rem:'Übrig',farm:'Farm',dep:'Einzahlen',depFist:'FIST einzahlen',approveFist:'FIST genehmigen',claim:'Auszahlen',redeem:'Rückkauf',stk:'Staking',stkA:'OSK Staking',stkB:'FIST Staking',approve:'OSK+FIST genehmigen',stakeA:'OSK staken',stakeB:'FIST staken',fuelHint:'Stake A zieht 2% FIST ein · Stake B zieht 2% FIST ein',fuelHintA:'Stake A zieht 2% FIST ein',fuelHintB:'Stake B zieht 2% FIST ein',orders:'Aufträge',ordersA:'A-Aufträge',ordersB:'B-Aufträge',pools:'Pool Gesamt',pA:'A Pool OSK',pAUsd:'A Pool USD',pB:'B Pool FIST',pBUsd:'B Pool USD',dir:'Direktwerbungen',log:'Protokoll',noDir:'Keine',active:'Aktiv',copied:'Kopiert!',fail:'FEHLGESCHLAGEN',tabFarm:'Farm',tabAStake:'OSK Staking',tabBStake:'FIST Staking',tabPool:'Pool',disconnected:'Wallet getrennt',pendingY:'Ausstehender Ertrag',tabFdStake:'Airdrop',fdPool:'Staking-Pool',fdCycle:'Zyklus',fdRate:'Rate / Zyklus',fdPoolBal:'Pool-Guthaben',fdBal:'FISTDAO-Guthaben',fdAllow:'Genehmigung',fdMyOrder:'Meine Staking-Order',fdNoOrder:'Keine Order (warte auf Operator)',fdAmount:'Betrag',fdStart:'Start',fdEnd:'Fällig',fdPayout:'Auszahlung',fdStatus:'Status',fdMature:'Fällig',fdReinvest:'Reinvestieren',fdApprove:'FISTDAO genehmigen',fdDoReinvest:'Reinvestieren',fdHint:'Der Betrag wird vom Operator festgelegt und ist konstant; Nutzer können nicht aufstocken. 10,5% pro Zyklus; Ausstieg bei 3x kumuliertem Zins.',fdTiers:'Airdrop-Stufen',fdReady:'Bereit zum Reinvestieren',fdNotMatured:'Noch nicht fällig',fdMultiplier:'Ausstiegsfaktor',fdEarned:'Kumulierter Zins',fdCap:'3x-Obergrenze',fdProgress:'Ausstiegsfortschritt',fdExited:'Ausgestiegen',fdWaitAirdrop:'Warte auf erneuten Operator-Airdrop',x3Osk:'OSK Staking 3x-Fortschritt',x3Fist:'FIST Staking 3x-Fortschritt',x3Earned:'Dynamischer Ertrag (Empfehlung+Team)',x3EarnedB:'Dynamischer Ertrag (Empfehlung+Team)',x3Thresh:'Ausstiegsschwelle (Kapital x3)',x3ThreshB:'Ausstiegsschwelle (Kapital x3)',x3Pct:'Ausstiegsfortschritt',x3PctB:'Ausstiegsfortschritt',x3GateLv:'Team-Level V1 oder höher erforderlich',x3GateOk:'V1 erreicht — Ausstiegsbedingung aktiv',x3Closed:'Ausgestiegen · Rechte geschlossen, neue Position nötig',treas:'Treasury · FISTDAO-Gebühr zu LP',trFee:'Ausstehende FISTDAO-Steuer',trPair:'OSK/FIST-Paar',trIns:'Empfänger (Versicherungspool)',trConvert:'Konvertieren (jeder kann aufrufen)',trSlip:'Slippage (fest)',trHint:'Konvertiert die im Treasury angesammelte FISTDAO-Kauf/Verkauf-Steuer (1,5%) über FISTDAO→BNI→WBNB→USDT→FIST in FIST, halbiert dann den FIST und bildet OSK/FIST-LP, die an den Versicherungspool gehen. Keine Berechtigungssperre; Slippage ist fest auf 1500 bp (15%).'},
   pt:{title:'OSK Motor de Ligação Dupla',level:'Nível',vdc:'VDC',ref:'Referenciador',myInv:'Investimento Farm',teamUsd:'Equipe Farm',dirUsd:'Direto Farm',pendD:'Ganho Direto',pendT:'Ganho Equipe',earnStk:'Lucro Staking Acum.',farmYield:'Rendimento Farm OSK',teamStkBinXUsd:'Staking Equipe OSK USD',teamStkBNIUsd:'Staking Equipe FIST USD',dir:'Referências Diretas',dirAddr:'Endereço',dirFarmInv:'Investimento Farm',dirStkDirBinX:'Stk Direto OSK(USD)',dirStkTeamBinX:'Stk Equipe OSK(USD)',dirOwnStkBinX:'Stake Próprio OSK',dirOwnStkBNI:'Stake Próprio FIST',dirStkDirBNI:'Stk Direto FIST(USD)',dirStkTeamBNI:'Stk Equipe FIST(USD)',dirFarmDir:'Farm Direto',dirFarmTeam:'Farm Equipe',_3x:'Pontuação 3x',cap:'Cap Total',rel:'Liberado',rem:'Restante',farm:'Farm',dep:'Depositar',depFist:'Depositar FIST',approveFist:'Aprovar FIST',claim:'Receber',redeem:'Resgatar',stk:'Staking',stkA:'OSK Staking',stkB:'FIST Staking',approve:'Aprovar OSK+FIST',stakeA:'Stake OSK',stakeB:'Stake FIST',fuelHint:'Stake A deduz 2% FIST · Stake B deduz 2% FIST',fuelHintA:'Stake A deduz 2% FIST',fuelHintB:'Stake B deduz 2% FIST',orders:'Ordens',ordersA:'Ordens A',ordersB:'Ordens B',pools:'Totais Pool',pA:'Pool A OSK',pAUsd:'Pool A USD',pB:'Pool B FIST',pBUsd:'Pool B USD',dir:'Referências Diretas',log:'Registro',noDir:'Nenhum',active:'Ativo',copied:'Copiado!',fail:'FALHOU',tabFarm:'Farm',tabAStake:'OSK Staking',tabBStake:'FIST Staking',tabPool:'Pool',disconnected:'Carteira desconectada',pendingY:'Rendimento Pendente',tabFdStake:'Airdrop',fdPool:'Pool de Staking',fdCycle:'Ciclo',fdRate:'Taxa / Ciclo',fdPoolBal:'Saldo do Pool',fdBal:'Saldo FISTDAO',fdAllow:'Autorização',fdMyOrder:'Minha Ordem de Staking',fdNoOrder:'Sem ordem (aguardando operador)',fdAmount:'Quantidade',fdStart:'Início',fdEnd:'Vencimento',fdPayout:'Pagamento',fdStatus:'Status',fdMature:'Vencido',fdReinvest:'Reinvestir',fdApprove:'Aprovar FISTDAO',fdDoReinvest:'Reinvestir',fdHint:'O valor é definido pelo operador e é fixo; o usuário não pode aumentar. 10,5% por ciclo; saída ao atingir 3x de juros acumulados.',fdTiers:'Níveis de Airdrop',fdReady:'Pronto para reinvestir',fdNotMatured:'Ainda não vencido',fdMultiplier:'Múltiplo de Saída',fdEarned:'Juros Acumulados',fdCap:'Teto 3x',fdProgress:'Progresso de Saída',fdExited:'Saiu',fdWaitAirdrop:'Aguardando novo airdrop do operador',x3Osk:'Progresso 3x Staking OSK',x3Fist:'Progresso 3x Staking FIST',x3Earned:'Ganho Dinâmico (Indicação+Equipe)',x3EarnedB:'Ganho Dinâmico (Indicação+Equipe)',x3Thresh:'Limite de Saída (Principal x3)',x3ThreshB:'Limite de Saída (Principal x3)',x3Pct:'Progresso de Saída',x3PctB:'Progresso de Saída',x3GateLv:'Requer nível de equipe V1 ou superior',x3GateOk:'V1 atingido — condição de saída ativa',x3Closed:'Saiu · direitos encerrados, reconstruir posição',treas:'Tesouraria · Taxa FISTDAO para LP',trFee:'Imposto FISTDAO Pendente',trPair:'Par OSK/FIST',trIns:'Destinatário (Pool de Seguros)',trConvert:'Converter (qualquer um pode chamar)',trSlip:'Slippage (fixo)',trHint:'Converte o imposto de compra/venda FISTDAO (1,5%) acumulado na tesouraria via FISTDAO→BNI→WBNB→USDT→FIST, depois divide o FIST pela metade para formar LP OSK/FIST enviado ao pool de seguros. Sem controle de permissão; o slippage é fixo em 1500 bp (15%).'}
 };
+// 生态商城入口按钮文案：独立小字典注入到 T，避免改动上面 9 行超长语言表。
+// 只用于顶部入口按钮（data-i18n="entryMall"），与生态农场按钮并列。
+const MALL_ENTRY = {zh:'生态商城',en:'Eco Mall',hi:'इको मॉल',ja:'エコモール',ko:'에코몰',es:'Eco Mall',fr:'Eco Mall',de:'Eco Mall',pt:'Eco Mall'};
+Object.keys(MALL_ENTRY).forEach(function(l){ if (T[l]) T[l].entryMall = MALL_ENTRY[l]; });
 const LANG_NAMES = {zh:'中文',en:'English',hi:'हिन्दी',ja:'日本語',ko:'한국어',es:'Español',fr:'Français',de:'Deutsch',pt:'Português'};
 const LEVELS = {
   zh:['Lv0','Lv1','Lv2','Lv3','Lv4','Lv5','Lv6','Lv7','Lv8','Lv9'],
@@ -1612,7 +1620,7 @@ async function verifySWHash() {
 }
 
 // ⚠️ 每次改动 sw.js 都要 bump 这个版本串，否则浏览器可能沿用旧 SW 缓存。
-const SW_REGISTER_URL = 'sw.js?v=BNIX-20261105-1';
+const SW_REGISTER_URL = 'sw.js?v=BNIX-20261107-2';
 
 async function registerSecureSW() {
   if (!('serviceWorker' in navigator)) return false;
@@ -3374,12 +3382,38 @@ const ECO_CRYPTO = {
 
   /** 把 payload 按合约字段上限切成 4 段。 */
   split(payload) {
+    const caps = _ecoPiiCaps;
+    const s = String(payload || '');
+    const total = caps.reduce((a, b) => a + b, 0);
+    if (s.length > total) {
+      throw new Error('收货信息过长：加密后 ' + s.length + ' 字符，上限 ' + total);
+    }
+    if (s.length === 0) return caps.map(() => '');
+    // ⚠️ 避坑：不能按「填满第一段再填第二段」切分。当前部署的字段上限是 512/512/1024/512，
+    //    典型密文只有 200~500 字符，会被整段塞进 receiver，phone/address 变成空串，
+    //    链上 `placeOrder` 直接 revert `EcoMall_InvalidShipping`（下单必失败）。
+    //    改为按上限比例分摊，保证 receiver/phone/address 三段都非空，且各段不超上限。
+    const sizes = caps.map((c) => Math.floor((s.length * c) / total));
+    let left = s.length - sizes.reduce((a, b) => a + b, 0);
+    for (let i = sizes.length - 1; i >= 0 && left > 0; i--) {
+      const room = caps[i] - sizes[i];
+      const add = Math.min(room, left);
+      sizes[i] += add;
+      left -= add;
+    }
+    for (let i = 0; i < 3 && i < sizes.length; i++) {
+      if (sizes[i] === 0) {
+        // 从末尾（note 段优先）借 1 个字符，保证 receiver/phone/address 非空。
+        let j = -1;
+        for (let k = sizes.length - 1; k >= 0; k--) {
+          if (k !== i && sizes[k] > 0 && (k >= 3 || sizes[k] > 1)) { j = k; break; }
+        }
+        if (j !== -1) { sizes[j] -= 1; sizes[i] += 1; }
+      }
+    }
     const out = [];
     let p = 0;
-    for (const cap of _ecoPiiCaps) {
-      out.push(payload.slice(p, p + cap));
-      p += cap;
-    }
+    for (const size of sizes) { out.push(s.slice(p, p + size)); p += size; }
     return out;
   },
 
@@ -3802,6 +3836,7 @@ async function ecoApproveUsdt() {
 
 async function ecoPlaceOrder() {
   if (!ECO) { lg(etr('ecoNotConfigured')); return; }
+  try {
   await withTxLock(async () => {
     const pid = parseInt($('ecoProduct').value);
     if (!(pid >= 0)) { lg(etr('ecoNoProducts')); return; }
@@ -3815,7 +3850,30 @@ async function ecoPlaceOrder() {
     const phone = $('ecoPhone').value.trim();
     const addressLine = $('ecoAddress').value.trim();
     const note = $('ecoNote').value.trim();
-    if (!receiver || !phone || !addressLine) { lg('请填写收货地址/联系人/联系电话'); return; }
+    if (!receiver || !phone || !addressLine) { lg('请填写收货地址/联系人/联系电话'); toast('请填写收货地址/联系人/联系电话', 'err'); return; }
+
+    // ── 前置校验：全部在钱包签名之前完成 ──
+    // ⚠️ 避坑：旧顺序是「先请求签名 → 再校验资格」。用户签完名才被静默拒绝，
+    //    而拒绝信息只写进页面底部日志（下单按钮在页面顶部），表现就是
+    //    「钱包弹出签名后没有任何反应」。这里提前拦截，并同时 toast 提示。
+    const payAssetNow = $('ecoPayAsset') ? $('ecoPayAsset').value : 'usdt';
+    if (payAssetNow === 'bnb' && !_ecoBnbEnabled) { toast(etr('ecoBnbOff'), 'err'); return; }
+    const [farmingNow, consumedNow] = await Promise.all([
+      ECO.minerOrderUsd(U).catch(() => Z0()),
+      ECO.totalConsumedUsd(U).catch(() => Z0())
+    ]);
+    if (farmingNow.lte(0)) { lg(etr('ecoNoFarming')); toast(etr('ecoNoFarming'), 'err'); return; }
+    if (farmingNow.lt(consumedNow.add(amountUsd))) { lg(etr('ecoExceeds')); toast(etr('ecoExceeds'), 'err'); return; }
+    const [prePool0, prePool1, prePool2] = await Promise.all([
+      ECO.getPool(0).catch(() => []),
+      ECO.getPool(1).catch(() => []),
+      ECO.getPool(2).catch(() => [])
+    ]);
+    if (!prePool0.length || !prePool1.length || !prePool2.length) { lg(etr('ecoPoolEmpty')); toast(etr('ecoPoolEmpty'), 'err'); return; }
+    if (payAssetNow === 'usdt') {
+      const allowanceNow = await USDT.allowance(U, getECO()).catch(() => Z0());
+      if (allowanceNow.lt(amountUsd)) { lg('请先授权 USDT'); toast('请先点击「授权 USDT」再下单', 'err'); return; }
+    }
 
     // ── 客户资料加密（需求 2）──
     // 4 个字段在本地加密后才上链；链上只有密文。
@@ -3838,13 +3896,15 @@ async function ecoPlaceOrder() {
       const payload = await ECO_CRYPTO.encryptShipping(S, U, {
         receiver, phone, addressLine, note
       }, supplierPub);
-      // 合约四字段上限 512/512/1024/512，把 payload 按上限切成 4 段写入。
+      // 合约四字段上限（当前部署 512/512/1024/512）：按比例分摊，保证前三段都非空，
+      // 否则 phone/address 为空串会被链上判为 EcoMall_InvalidShipping。
       const parts = ECO_CRYPTO.split(payload);
       encReceiver = parts[0]; encPhone = parts[1]; encAddress = parts[2]; encNote = parts[3];
       if (!getEcoAdminPubkey()) lg('警告：未配置管理员公钥，管理员将无法解密该订单资料');
       if (!supplierPub) lg('提示：该商品的商家未登记加密公钥，商家无法解密收货信息');
     } catch (e) {
       lg('加密失败，已中止下单：' + explainErr(e));
+      toast('加密失败，已中止下单：' + explainErr(e), 'err');
       resetBtn('btnEcoOrder');
       return;
     }
@@ -3853,8 +3913,8 @@ async function ecoPlaceOrder() {
       ECO.minerOrderUsd(U).catch(() => Z0()),
       ECO.totalConsumedUsd(U).catch(() => Z0())
     ]);
-    if (farming.lte(0)) { lg(etr('ecoNoFarming')); return; }
-    if (farming.lt(consumed.add(amountUsd))) { lg(etr('ecoExceeds')); return; }
+    if (farming.lte(0)) { lg(etr('ecoNoFarming')); toast(etr('ecoNoFarming'), 'err'); return; }
+    if (farming.lt(consumed.add(amountUsd))) { lg(etr('ecoExceeds')); toast(etr('ecoExceeds'), 'err'); return; }
 
     // 五段必须一次性全部发出，任一池为空整单回滚 —— 这里先拦一次，避免用户白付 gas。
     const [pool0, pool1, pool2] = await Promise.all([
@@ -3862,10 +3922,10 @@ async function ecoPlaceOrder() {
       ECO.getPool(1).catch(() => []),
       ECO.getPool(2).catch(() => [])
     ]);
-    if (!pool0.length || !pool1.length || !pool2.length) { lg(etr('ecoPoolEmpty')); return; }
+    if (!pool0.length || !pool1.length || !pool2.length) { lg(etr('ecoPoolEmpty')); toast(etr('ecoPoolEmpty'), 'err'); return; }
 
     const asset = $('ecoPayAsset') ? $('ecoPayAsset').value : 'usdt';
-    if (asset === 'bnb' && !_ecoBnbEnabled) { lg(etr('ecoBnbOff')); return; }
+    if (asset === 'bnb' && !_ecoBnbEnabled) { lg(etr('ecoBnbOff')); toast(etr('ecoBnbOff'), 'err'); return; }
     setBtnPending('btnEcoOrder');
 
     if (asset === 'bnb') {
@@ -3896,6 +3956,13 @@ async function ecoPlaceOrder() {
     resetBtn('btnEcoOrder');
     await loadEco();
   });
+  } catch (e) {
+    // 任何未预料的异常都要复位按钮，否则按钮会永久禁用（tx-pending），用户只能刷新页面。
+    lg('下单失败：' + explainErr(e));
+    toast('下单失败：' + explainErr(e), 'err');
+  } finally {
+    resetBtn('btnEcoOrder');
+  }
 }
 
 async function ecoAddProduct() {
@@ -4768,7 +4835,18 @@ async function _sendTxWithGuard(opts) {
   if (value && !BN(value).isZero()) overrides.value = value;
 
   // 4. Send transaction
-  const tx = await S.sendTransaction({ to, data, ...overrides });
+  // ⚠️ 避坑：`sendTransaction` 抛错（用户拒绝 4001、RPC 报错、gas 字段异常）时若直接向上抛，
+  //    调用方不会再执行 resetBtn，按钮会永久停留在 tx-pending（禁用 + 转圈），
+  //    表现为「钱包弹窗后页面再无反应，且按钮点不动」。这里转成返回值，交给调用方复位。
+  let tx;
+  try {
+    tx = await S.sendTransaction({ to, data, ...overrides });
+  } catch (e) {
+    const why = explainErr(e);
+    lg('❌ TX SEND FAILED [' + label + ']: ' + why);
+    toast(label + ' 未发送：' + why, 'err');
+    return { ok: false, error: why };
+  }
   lg('📤 ' + label + ': ' + san(tx.hash.slice(0, 14)) + '...');
   toast(label + ' 已提交', '');
 
@@ -5061,6 +5139,16 @@ function copyAddr() {
 function openFarm() {
   try { _stopPolling(); } catch (_) {}
   location.href = './farm/';
+}
+
+// ==================== 生态商城入口（与生态农场同款：同源子页跳转） ====================
+/** 跳转到 ./mall/（生态商城 · EcoMallV4，独立静态站点，独立演进）。
+ *  ⚠️ 避坑: 商城与主站同源且同处根 SW 作用域，sw.js 的 HTML 哈希钉只作用于主文档
+ *    （/、/index.html、/mainindex.html），所以 ./mall/index.html 不会被判篡改。
+ *  ⚠️ 避坑: 商城页自己会读 ./config.json 与 ./js/*，必须以子目录形式发布（相对路径）。 */
+function openMall() {
+  try { _stopPolling(); } catch (_) {}
+  location.href = './mall/';
 }
 
 
