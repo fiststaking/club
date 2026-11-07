@@ -195,3 +195,36 @@ code {
   border-radius: 4px;
   word-break: break-all;
 }
+
+/* ── Back to the main site ────────────────────────────────────────────────────
+   Same pill as the farm page (../farm/), so both sub-sites of the club site look
+   and behave identically: fixed bottom-left, teal, always on top. */
+#back-home {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 2147483647;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(15, 118, 110, 0.92);
+  color: #fff;
+  font: 600 12px/1 system-ui, -apple-system, "Segoe UI", sans-serif;
+  text-decoration: none;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
+#back-home:hover,
+#back-home:focus-visible {
+  background: #0d9488;
+  outline: none;
+}
+
+/* Keep it clear of the on-screen keyboard / bottom bar on phones. */
+@media (max-width: 560px) {
+  #back-home {
+    bottom: 16px;
+  }
+}
