@@ -122,7 +122,7 @@
       import { MALL_ABI, ERC20_ABI, REGISTRY_ABI } from "./js/abi.js";
       import { sealOrder, clearKeyCache } from "./js/crypto.js";
       import { readOrder, decryptAsBuyer, allUserOrders, cipherHtml, plainHtml } from "./js/orders.js";
-      import { $, msg, busy, esc, bindCopy, withTimeout } from "./js/ui.js";
+      import { $, msg, busy, esc, bindCopy, withTimeout, mountBackHome } from "./js/ui.js";
       import { initLang, t, statusLabel, errorText, onLangChange } from "./js/i18n.js";
 
       let cfg;
@@ -140,6 +140,7 @@
 
       async function boot() {
         initLang();
+        mountBackHome();
         try {
           cfg = await loadConfig();
           reader = await readProvider(cfg);
@@ -907,5 +908,5 @@
 
       boot();
     </script>
-  </body>
+</body>
 </html>

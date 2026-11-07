@@ -94,7 +94,7 @@
       import { MALL_ABI } from "./js/abi.js";
       import { adminSpki, b64 } from "./js/crypto.js";
       import { readOrder, decryptAsAdmin, cipherHtml, plainHtml } from "./js/orders.js";
-      import { $, msg, busy, esc, bindCopy } from "./js/ui.js";
+      import { $, msg, busy, esc, bindCopy, mountBackHome } from "./js/ui.js";
       import { initLang, t, statusLabel, errorText, onLangChange } from "./js/i18n.js";
 
       let cfg;
@@ -107,6 +107,7 @@
 
       async function boot() {
         initLang();
+        mountBackHome();
         try {
           cfg = await loadConfig();
           reader = await readProvider(cfg);
@@ -368,5 +369,5 @@
 
       boot();
     </script>
-  </body>
+</body>
 </html>
