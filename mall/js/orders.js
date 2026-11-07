@@ -27,6 +27,80 @@ export async function readOrder(reader, cfg, orderId) {
   };
 }
 
+// Product names for order rows. `getOrderInfo` only returns `productId`, so a bare "商品 0" told the
+// buyer/merchant nothing about what was actually ordered. Names are cached per mall because one page
+// usually renders several orders for the same product, and each lookup is a separate RPC.
+const nameCache = new Map(); // `${mall}|${id}` -> name
+
+/**
+ * Resolves productId -> name for one mall (selected by `cfg.mall`).
+ * Never throws: unknown or archived ids are simply absent, and the caller falls back to `#id`.
+ */
+export async function productNameMap(reader, cfg, ids) {
+  const out = new Map();
+  // `Number(null)` and `Number("")` are 0, so reject non-values before converting; otherwise a
+  // missing productId would silently resolve product 0.
+  const unique = [
+    ...new Set(
+      (ids || [])
+        .filter((v) => v !== null && v !== undefined && v !== "" && typeof v !== "boolean")
+        .map(Number)
+        .filter((n) => Number.isInteger(n) && n >= 0)
+    ),
+  ];
+  if (unique.length === 0) return out;
+  const mall = mallContract(reader, cfg, MALL_ABI);
+  const prefix = `${String(cfg.mall).toLowerCase()}|`;
+  await Promise.all(
+    unique.map(async (id) => {
+      const key = prefix + id;
+      if (nameCache.has(key)) {
+        out.set(id, nameCache.get(key));
+        return;
+      }
+      try {
+        const [name] = await mall.getProductInfo(id);
+        const clean = String(name || "").trim();
+        // Only cache a real hit: a transient RPC failure must not pin `#id` forever.
+        if (clean) {
+          nameCache.set(key, clean);
+          out.set(id, clean);
+        }
+      } catch {
+        /* unknown or archived id: the caller falls back to the numeric id */
+      }
+    })
+  );
+  return out;
+}
+
+/**
+ * Names for orders that may come from several malls (the buyer list walks the registry).
+ * Returns `Map<mallLowercase, Map<productId, name>>`.
+ */
+export async function orderProductNames(reader, cfg, orders) {
+  const byMall = new Map();
+  for (const o of orders || []) {
+    const addr = String(o.mall || cfg.mall).toLowerCase();
+    if (!byMall.has(addr)) byMall.set(addr, []);
+    byMall.get(addr).push(o.productId);
+  }
+  const out = new Map();
+  await Promise.all(
+    [...byMall].map(async ([addr, ids]) => {
+      const local = addr === String(cfg.mall).toLowerCase() ? cfg : { ...cfg, mall: addr };
+      out.set(addr, await productNameMap(reader, local, ids).catch(() => new Map()));
+    })
+  );
+  return out;
+}
+
+/** `#0 Acceptance test product`, or `#0` when the name is unknown. */
+export function productLabel(id, names) {
+  const n = names && names.get(Number(id));
+  return n ? `#${id} ${n}` : `#${id}`;
+}
+
 /** Reads the envelope header only (no access check, no PII). */
 export async function readEnvelope(reader, cfg, orderId) {
   const mall = mallContract(reader, cfg, MALL_ABI);
