@@ -453,4 +453,506 @@
   }
 })();
 </script>
+<script>
+/* ══ 开奖哈希查询 · 完整纯数字面板（移植自 shengtainongchang RulesPanel） ══════
+   口径与合约 FarmGuess._parityOfLastThreeDigits / computeResult 完全一致：
+     x = uint256(hash)
+     x % 1000 → 十进制末三位 d2 d1 d0（不足补 0）
+     sum = d2 + d1 + d0，result = sum % 2（1 = 单，0 = 双）
+   十进制末三位需要全部 32 字节参与，绝不能看十六进制字符串末尾 3 个字符 ——
+   两种口径在约一半哈希上结论相反，面板同时展示两种结果以便对照。
+   只读换算在本地完成；「链上校验」通过 window.__FARM_ETH__ 读 computeResult，
+   不发起任何交易。 */
+(function () {
+  'use strict';
+
+  var FARM = '0xea8cb2d57d40dafac22b24fde661dd6b64f90848';
+  var SEL_COMPUTE_RESULT = '0x27157d58'; // computeResult(bytes32)
+  var EXPLORER = 'https://bscscan.com';
+  var EXAMPLE_HASH = '0xfdc31a577a2af836045b653fc8fd0f3ba8d2979039d068d0dae4a95e4e1fd8a3';
+  var HEX_RE = /^[0-9a-fA-F]+$/;
+
+  var el, inputEl, outEl, toggleEl;
+  var lookupSeq = 0;
+
+  function label(p) { return p === 1 ? '单' : '双'; }
+
+  // Any hex string (1..64 nibbles) -> full decimal. Returns null on invalid
+  // input or >32 bytes; mirrors convertHex() in the source project.
+  function convertHex(raw) {
+    var s = String(raw == null ? '' : raw).trim().replace(/[\s,_]/g, '');
+    if (!s) return null;
+    var prefixed = s.slice(0, 2).toLowerCase() === '0x';
+    var body = prefixed ? s.slice(2) : s;
+    if (!body || !HEX_RE.test(body)) return null;
+    var trimmed = body.replace(/^0+(?=.)/, '');
+    if (trimmed.length > 64) return null;
+    return {
+      display: prefixed ? '0x' + body : body,
+      body: trimmed || '0',
+      decimal: BigInt('0x' + (trimmed || '0')).toString(),
+      nibbles: body.length,
+      bytes: Math.ceil(body.length / 2),
+      isHash: body.length === 64
+    };
+  }
+
+  // Full breakdown of one 32-byte draw hash, including the hex-tail misreading.
+  function analyzeHash(hash) {
+    var body = hash.toLowerCase().replace(/^0x/, '');
+    var x = BigInt('0x' + body);
+    var lastThree = (x % 1000n).toString().padStart(3, '0');
+    var hundreds = Number(lastThree[0]);
+    var tens = Number(lastThree[1]);
+    var units = Number(lastThree[2]);
+    var sum = hundreds + tens + units;
+    var parity = sum % 2;
+
+    var hexTail = body.slice(-3);
+    var hexSum = hexTail.split('').reduce(function (a, ch) { return a + parseInt(ch, 16); }, 0);
+    var hexParity = hexSum % 2;
+
+    return {
+      hash: '0x' + body,
+      lastThree: lastThree,
+      hundreds: hundreds, tens: tens, units: units,
+      sum: sum,
+      parity: parity,
+      resultLabel: label(parity),
+      hexTail: hexTail,
+      hexSum: hexSum,
+      hexLabel: label(hexParity),
+      hexDiffers: hexParity !== parity
+    };
+  }
+
+  function pad64(hex) {
+    return hex.toLowerCase().replace(/^0x/, '').padStart(64, '0');
+  }
+
+  function eth() { return window.__FARM_ETH__ || window.ethereum || null; }
+
+  function readOnChain(hash, cb) {
+    var e = eth();
+    if (!e) { cb({ status: 'error', message: '未连接 RPC，本地换算不受影响' }); return; }
+    var data = SEL_COMPUTE_RESULT + pad64(hash);
+    e.request({ method: 'eth_call', params: [{ to: FARM, data: data }, 'latest'] })
+      .then(function (r) {
+        if (!r || r === '0x') throw new Error('合约无返回值');
+        var value = Number(BigInt(r));
+        return e.request({ method: 'eth_getBlockByHash', params: [hash.toLowerCase(), false] })
+          .then(function (blk) {
+            var num = blk && blk.number ? parseInt(blk.number, 16) : null;
+            cb({ status: 'ok', value: value, blockNumber: num });
+          });
+      })
+      .catch(function (err) {
+        cb({ status: 'error', message: (err && err.message ? err.message : String(err)).slice(0, 100) });
+      });
+  }
+
+  function h(tag, cls, text) {
+    var node = document.createElement(tag);
+    if (cls) node.className = cls;
+    if (text != null) node.textContent = text;
+    return node;
+  }
+
+  function kv(labelText, valueNode, accent) {
+    var block = h('div', 'hp-kv' + (accent ? ' hp-kv--accent' : ''));
+    block.appendChild(h('span', 'hp-kv-label', labelText));
+    block.appendChild(valueNode);
+    return block;
+  }
+
+  function render(input) {
+    outEl.innerHTML = '';
+    var invalid = input.trim().length > 0 && convertHex(input) === null;
+    if (invalid) {
+      outEl.appendChild(h('div', 'hp-notice hp-notice--err',
+        '不是合法的十六进制：只能包含 0-9 与 a-f，最多 64 位（32 字节）。'));
+      return;
+    }
+    if (!input.trim()) {
+      outEl.appendChild(h('div', 'hp-notice',
+        '在上方输入或粘贴十六进制，十进制结果会立刻显示在这里。'));
+      return;
+    }
+
+    var c = convertHex(input);
+    if (!c) return;
+
+    var hexNode = h('code', 'hp-mono hp-full', c.display);
+    var decNode = h('code', 'hp-mono hp-full hp-decimal', c.decimal);
+    decNode.setAttribute('data-testid', 'decimal-value');
+    outEl.appendChild(kv(c.isHash ? '开奖哈希（十六进制）' : '十六进制输入（' + c.nibbles + ' 位 · ' + c.bytes + ' 字节）', hexNode));
+    outEl.appendChild(kv(c.isHash ? '开奖哈希 → 十进制（完整数字）' : '十进制（完整纯数字）', decNode, true));
+
+    if (!c.isHash) {
+      outEl.appendChild(h('div', 'hp-notice',
+        '已转换为十进制。当前输入 ' + c.nibbles + ' 位十六进制（' + c.bytes +
+        ' 字节），不是 32 字节区块哈希，因此不计算单双。补足到 64 位即可显示开奖结果。'));
+      return;
+    }
+
+    var a = analyzeHash(c.body);
+
+    // 状态行：通过 eth_getBlockByHash 自动确认该哈希是否为本链真实区块。
+    var statusRow = h('div', 'hp-row');
+    statusRow.appendChild(h('span', null, '结果状态'));
+    statusRow.appendChild(h('b', null, '查询区块中…'));
+    outEl.appendChild(statusRow);
+
+    var blockNum = null;
+    function applyBlock(num) {
+      blockNum = num;
+      if (num != null) {
+        statusRow.replaceChild(h('b', 'hp-accent', '结果已上链（区块 #' + num + '）'), statusRow.lastChild);
+        linkTail.textContent = '（区块 #' + num + '）';
+      } else {
+        statusRow.replaceChild(h('b', 'hp-warn', '未找到该区块（非本网络哈希或尚未生成）'), statusRow.lastChild);
+      }
+    }
+
+    // 开奖结果：单（528 → 15）—— 末三位 → 三位之和
+    var resRow = h('div', 'hp-row');
+    resRow.appendChild(h('span', null, '开奖结果'));
+    resRow.appendChild(h('b', a.parity === 1 ? 'hp-accent' : 'hp-info',
+      a.resultLabel + '（' + a.lastThree + ' → ' + a.sum + '）'));
+    outEl.appendChild(resRow);
+
+    var row = h('div', 'hp-row');
+    row.appendChild(h('span', null, '三位相加'));
+    row.appendChild(h('b', null, '百 ' + a.hundreds + ' + 十 ' + a.tens + ' + 个 ' + a.units + ' = ' + a.sum));
+    outEl.appendChild(row);
+
+    var linkNode = h('a', 'hp-mono hp-full hp-link', EXPLORER + '/block/' + a.hash);
+    linkNode.href = EXPLORER + '/block/' + a.hash;
+    linkNode.target = '_blank';
+    linkNode.rel = 'noreferrer';
+    var linkTail = h('b', 'hp-mono', '');
+    var linkRow = h('div', 'hp-row hp-row--top');
+    linkRow.appendChild(h('span', null, '开奖区块链接'));
+    var linkWrap = h('div', 'hp-linkwrap');
+    linkWrap.appendChild(linkNode);
+    linkWrap.appendChild(linkTail);
+    linkRow.appendChild(linkWrap);
+    outEl.appendChild(linkRow);
+
+    row = h('div', 'hp-row');
+    row.appendChild(h('span', null, '常见误读：十六进制末 3 字符'));
+    row.appendChild(h('b', 'hp-dim', a.hexTail + ' → ' + a.hexSum + ' → ' + a.hexLabel));
+    outEl.appendChild(row);
+
+    if (a.hexDiffers) {
+      outEl.appendChild(h('div', 'hp-notice hp-notice--warn',
+        '按十六进制末 3 字符会得到「' + a.hexLabel + '」，与合约口径「' + a.resultLabel +
+        '」不同。合约只看十进制末三位，请以上面的开奖结果为准。'));
+    }
+
+    // 自动查块：只读 eth_getBlockByHash，无需钱包。
+    (function () {
+      var e = eth();
+      if (!e) { statusRow.replaceChild(h('b', 'hp-warn', '未连接 RPC，无法确认上链状态'), statusRow.lastChild); return; }
+      var seq = ++lookupSeq;
+      e.request({ method: 'eth_getBlockByHash', params: [a.hash, false] })
+        .then(function (blk) {
+          if (lookupSeq !== seq) return;
+          applyBlock(blk && blk.number ? parseInt(blk.number, 16) : null);
+        })
+        .catch(function () {
+          if (lookupSeq === seq) applyBlock(null);
+        });
+    })();
+
+    // 可选：调合约 computeResult 交叉验证本地单双结论。
+    var chainNode = h('div', 'hp-row');
+    chainNode.appendChild(h('span', null, '链上 computeResult'));
+    chainNode.appendChild(h('b', null, '未校验'));
+    outEl.appendChild(chainNode);
+
+    var btn = h('button', 'hp-verify', '链上校验 computeResult（可选）');
+    btn.type = 'button';
+    outEl.appendChild(btn);
+    btn.addEventListener('click', function () {
+      btn.disabled = true;
+      btn.textContent = '校验中...';
+      readOnChain(a.hash, function (res2) {
+        btn.disabled = false;
+        btn.textContent = '链上校验 computeResult（可选）';
+        if (res2.status === 'ok') {
+          var ok = res2.value === a.parity;
+          chainNode.replaceChild(
+            h('b', ok ? 'hp-accent' : 'hp-err',
+              res2.value + ' · ' + (ok ? '与本地计算一致' : '与本地计算不一致')),
+            chainNode.lastChild);
+        } else {
+          chainNode.replaceChild(h('b', 'hp-err', res2.message), chainNode.lastChild);
+        }
+      });
+    });
+  }
+
+  function build() {
+    if (document.getElementById('hash-panel')) return;
+
+    var css = document.createElement('style');
+    css.textContent = [
+      '#hash-panel{position:fixed;left:12px;bottom:52px;width:340px;z-index:2147483646;',
+      'font:13px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;color:#e2e8f0;',
+      'background:rgba(15,23,42,.96);border:1px solid rgba(148,163,184,.28);border-radius:12px;',
+      'box-shadow:0 10px 30px rgba(0,0,0,.45);overflow:hidden}',
+      '#hash-panel .hp-head{display:flex;align-items:center;justify-content:space-between;',
+      'padding:8px 12px;background:rgba(30,41,59,.9);cursor:pointer;user-select:none}',
+      '#hash-panel .hp-title{font-weight:600;font-size:12px;letter-spacing:.02em}',
+      '#hash-panel.rp-collapsed .hp-body{display:none}',
+      '#hash-panel .hp-body{padding:10px 12px 12px;display:flex;flex-direction:column;gap:8px}',
+      '#hash-panel input{width:100%;box-sizing:border-box;padding:7px 9px;border-radius:7px;',
+      'border:1px solid rgba(148,163,184,.35);background:rgba(2,6,23,.85);color:#e2e8f0;',
+      'font:12px/1.4 monospace}',
+      '#hash-panel .hp-actions{display:flex;gap:6px}',
+      '#hash-panel .hp-example{flex:0 0 auto;padding:6px 10px;border:0;border-radius:7px;cursor:pointer;',
+      'background:#334155;color:#e2e8f0;font-weight:600;font-size:11px}',
+      '#hash-panel .hp-example:hover{background:#475569}',
+      '#hash-panel .hp-verify{width:100%;padding:8px;border:0;border-radius:7px;cursor:pointer;',
+      'background:rgba(15,118,110,.35);color:#7dd3fc;border:1px solid rgba(125,211,252,.35);',
+      'font-weight:600;font-size:12px}',
+      '#hash-panel .hp-verify:hover:not(:disabled){background:rgba(15,118,110,.55)}',
+      '#hash-panel .hp-verify:disabled{opacity:.6;cursor:default}',
+      '#hash-panel .hp-kv{display:flex;flex-direction:column;gap:3px}',
+      '#hash-panel .hp-kv-label{font-size:11px;color:#94a3b8}',
+      '#hash-panel .hp-kv--accent .hp-kv-label{color:#7dd3fc}',
+      '#hash-panel .hp-kv--accent .hp-decimal{color:#7dd3fc;border-color:rgba(125,211,252,.4)}',
+      '#hash-panel .hp-full{word-break:break-all;white-space:pre-wrap;display:block}',
+      '#hash-panel .hp-mono{font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;',
+      'color:#e2e8f0;font-weight:400}',
+      '#hash-panel .hp-decimal{padding:6px 8px;border:1px solid rgba(148,163,184,.25);',
+      'border-radius:6px;background:rgba(2,6,23,.6);max-height:120px;overflow:auto}',
+      '#hash-panel .hp-link{color:#7dd3fc;text-decoration:none}',
+      '#hash-panel .hp-link:hover{text-decoration:underline}',
+      '#hash-panel .hp-row--top{align-items:flex-start}',
+      '#hash-panel .hp-linkwrap{display:flex;flex-direction:column;gap:2px;align-items:flex-end;',
+      'min-width:0;text-align:right}',
+      '#hash-panel .hp-warn{color:#fbbf24}',
+      '#hash-panel .hp-notice{font-size:11px;color:#94a3b8;line-height:1.5;',
+      'padding:6px 8px;border-radius:6px;background:rgba(2,6,23,.5)}',
+      '#hash-panel .hp-notice--err{color:#f87171}',
+      '#hash-panel .hp-notice--warn{color:#fbbf24}',
+      '#hash-panel .hp-row{display:flex;justify-content:space-between;gap:8px;',
+      'font-size:11px;color:#94a3b8;align-items:baseline}',
+      '#hash-panel .hp-row b{color:#e2e8f0;font-weight:600;font-variant-numeric:tabular-nums;',
+      'text-align:right;word-break:break-all}',
+      '#hash-panel .hp-accent{color:#34d399}',
+      '#hash-panel .hp-info{color:#7dd3fc}',
+      '#hash-panel .hp-err{color:#f87171}',
+      '#hash-panel .hp-dim{color:#94a3b8;font-weight:400}',
+      '#hash-panel .hp-sep{height:1px;background:rgba(148,163,184,.2);margin:2px 0}',
+      '@media (max-width:560px){#hash-panel{width:calc(100% - 24px);left:12px;right:12px;bottom:52px}}'
+    ].join('');
+    document.head.appendChild(css);
+
+    el = document.createElement('div');
+    el.id = 'hash-panel';
+    el.innerHTML = [
+      '<div class="hp-head"><span class="hp-title">开奖哈希查询 · 纯数字换算</span><span id="hp-toggle">−</span></div>',
+      '<div class="hp-body">',
+      '<div class="hp-actions">',
+      '<input id="hp-input" placeholder="粘贴十六进制，例如 0xad5e… 或任意长度 0x1f" autocomplete="off" spellcheck="false" />',
+      '<button id="hp-example" class="hp-example" type="button">示例</button>',
+      '</div>',
+      '<div id="hp-out"></div>',
+      '</div>'
+    ].join('');
+    document.body.appendChild(el);
+
+    inputEl = document.getElementById('hp-input');
+    outEl = document.getElementById('hp-out');
+    toggleEl = document.getElementById('hp-toggle');
+
+    // Live conversion on every keystroke, no button needed.
+    inputEl.addEventListener('input', function () { render(inputEl.value); });
+    document.getElementById('hp-example').addEventListener('click', function () {
+      inputEl.value = EXAMPLE_HASH;
+      render(inputEl.value);
+    });
+
+    // On narrow screens start collapsed so the panel does not cover the bet form.
+    if (window.innerWidth && window.innerWidth < 560) {
+      el.classList.add('rp-collapsed');
+      toggleEl.textContent = '+';
+    }
+    el.querySelector('.hp-head').addEventListener('click', function () {
+      var collapsed = el.classList.toggle('rp-collapsed');
+      toggleEl.textContent = collapsed ? '+' : '−';
+    });
+
+    render('');
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', build);
+  } else {
+    build();
+  }
+})();
+</script>
+<script>
+/* ══ 我的记录 · 开奖结果直接展示（DOM 层增强） ═══════════════════════════════
+   React 产物里每条记录只显示截断的揭晓哈希链接。这里用 MutationObserver 监听
+   「我的记录」列表，对每张 .bet 卡片在其后追加完整开奖结果块：
+     开奖结果   单（528 → 15）        ← 十进制末三位 → 三位之和，与合约 computeResult 一致
+     十进制（完整数字）  3084508734…528
+     开奖区块   #132351572（链接到 BscScan）
+   区块号通过 __FARM_ETH__ 只读 eth_getBlockByHash 查询并缓存；本地换算永不依赖网络。
+   ⚠️ React 会管理 .bet 的子节点，因此结果块挂在 <article class="bet"> 自身上，
+   并用 data 标记防止重复注入；React 重渲染删掉后观察器会自动补回。 */
+(function () {
+  'use strict';
+
+  var EXPLORER = 'https://bscscan.com';
+  var HEX_RE = /^[0-9a-fA-F]+$/;
+  var MARK = 'hpBetResult';
+  var blockCache = {};
+  var inflight = {};
+
+  function eth() { return window.__FARM_ETH__ || window.ethereum || null; }
+
+  function analyze(body) {
+    var x = BigInt('0x' + body);
+    var lastThree = (x % 1000n).toString().padStart(3, '0');
+    var sum = Number(lastThree[0]) + Number(lastThree[1]) + Number(lastThree[2]);
+    return { lastThree: lastThree, sum: sum, parity: sum % 2, label: sum % 2 === 1 ? '单' : '双' };
+  }
+
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+
+  function row(label, valueNode) {
+    var r = el('div', 'hp-bet-row');
+    r.appendChild(el('span', 'hp-bet-label', label));
+    r.appendChild(valueNode);
+    return r;
+  }
+
+  function setBlock(article, hash, num) {
+    var box = article.querySelector('.hp-bet-result');
+    if (!box) return;
+    var node = box.querySelector('.hp-bet-block b');
+    if (!node) return;
+    if (num != null) {
+      node.textContent = '#' + num;
+      node.classList.add('hp-bet-ok');
+    } else {
+      node.textContent = '未找到区块';
+      node.classList.add('hp-bet-warn');
+    }
+  }
+
+  function lookupBlock(article, hash) {
+    if (blockCache[hash] !== undefined) { setBlock(article, hash, blockCache[hash]); return; }
+    if (inflight[hash]) { inflight[hash].push(article); return; }
+    var waiters = [article];
+    inflight[hash] = waiters;
+    var e = eth();
+    if (!e) {
+      delete inflight[hash];
+      waiters.forEach(function (a) { setBlock(a, hash, null); });
+      return;
+    }
+    e.request({ method: 'eth_getBlockByHash', params: [hash, false] })
+      .then(function (blk) {
+        var num = blk && blk.number ? parseInt(blk.number, 16) : null;
+        blockCache[hash] = num;
+        delete inflight[hash];
+        waiters.forEach(function (a) { setBlock(a, hash, num); });
+      })
+      .catch(function () {
+        delete inflight[hash];
+        waiters.forEach(function (a) { setBlock(a, hash, null); });
+      });
+  }
+
+  function decorate(article) {
+    var link = article.querySelector('.bet-meta a[href*="/block/0x"]');
+    if (!link) return;
+    var m = (link.getAttribute('href') || '').match(/0x[0-9a-fA-F]{64}/);
+    if (!m) return;
+    var hash = m[0];
+    var body = hash.slice(2).toLowerCase();
+    if (!HEX_RE.test(body) || body.length !== 64) return;
+    if (article.getAttribute(MARK) === hash) return;
+    article.setAttribute(MARK, hash);
+
+    var a = analyze(body);
+
+    var box = el('div', 'hp-bet-result');
+    var res = el('b', a.parity === 1 ? 'hp-bet-odd' : 'hp-bet-even',
+      a.label + '（' + a.lastThree + ' → ' + a.sum + '）');
+    box.appendChild(row('开奖结果', res));
+
+    var dec = el('code', 'hp-bet-decimal mono', BigInt('0x' + body).toString());
+    box.appendChild(row('开奖哈希 → 十进制（完整数字）', dec));
+
+    var blockWrap = el('span', 'hp-bet-block');
+    var blockLink = el('a', 'mono hp-bet-hashlink', hash);
+    blockLink.href = EXPLORER + '/block/' + hash;
+    blockLink.target = '_blank';
+    blockLink.rel = 'noreferrer';
+    blockLink.title = '在区块浏览器中查看开奖区块';
+    blockWrap.appendChild(blockLink);
+    blockWrap.appendChild(el('b', null, ' 查询区块中…'));
+    box.appendChild(row('开奖区块', blockWrap));
+
+    article.appendChild(box);
+    lookupBlock(article, hash);
+  }
+
+  function scan() {
+    var cards = document.querySelectorAll('article.bet');
+    for (var i = 0; i < cards.length; i++) decorate(cards[i]);
+  }
+
+  var css = document.createElement('style');
+  css.textContent = [
+    '.hp-bet-result{margin-top:8px;padding:8px 10px;border:1px solid rgba(148,163,184,.22);',
+    'border-radius:8px;background:rgba(2,6,23,.45);display:flex;flex-direction:column;gap:5px}',
+    '.hp-bet-row{display:flex;flex-direction:column;gap:2px}',
+    '.hp-bet-label{font-size:10px;color:#94a3b8;letter-spacing:.02em}',
+    '.hp-bet-row b{color:#e2e8f0;font-weight:600;font-size:12px;',
+    'font-variant-numeric:tabular-nums;word-break:break-all}',
+    '.hp-bet-odd{color:#34d399}',
+    '.hp-bet-even{color:#7dd3fc}',
+    '.hp-bet-decimal{display:block;font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;',
+    'color:#7dd3fc;word-break:break-all;white-space:pre-wrap;user-select:all;max-height:96px;overflow:auto}',
+    '.hp-bet-block{display:flex;gap:4px;align-items:baseline;flex-wrap:wrap;word-break:break-all}',
+    '.hp-bet-hashlink{font-size:10px;color:#7dd3fc;text-decoration:none;word-break:break-all}',
+    '.hp-bet-hashlink:hover{text-decoration:underline}',
+    '.hp-bet-block b{color:#94a3b8;font-size:11px;font-weight:600}',
+    '.hp-bet-ok{color:#34d399}',
+    '.hp-bet-warn{color:#fbbf24}'
+  ].join('');
+  document.head.appendChild(css);
+
+  var pending = null;
+  var mo = new MutationObserver(function () {
+    if (pending) return;
+    pending = requestAnimationFrame(function () { pending = null; scan(); });
+  });
+
+  function start() {
+    mo.observe(document.body, { childList: true, subtree: true });
+    scan();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', start);
+  } else {
+    start();
+  }
+})();
+</script>
 </body></html>
