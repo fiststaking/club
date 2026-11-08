@@ -747,7 +747,7 @@
       '#hash-panel .hp-err{color:#f87171}',
       '#hash-panel .hp-dim{color:#94a3b8;font-weight:400}',
       '#hash-panel .hp-sep{height:1px;background:rgba(148,163,184,.2);margin:2px 0}',
-      '@media (max-width:560px){#hash-panel{width:calc(100% - 24px);left:12px;right:12px;bottom:52px}}'
+      '@media (max-width:560px){#hash-panel{width:calc(100% - 24px);left:12px;right:12px}}'
     ].join('');
     document.head.appendChild(css);
 
@@ -785,6 +785,32 @@
       var collapsed = el.classList.toggle('rp-collapsed');
       toggleEl.textContent = collapsed ? '+' : '−';
     });
+
+    /* ── 移动端浮动面板避让 ───────────────────────────────────────────────
+       <560px 时推荐关系面板(#ref-panel, bottom:56px)与本面板都会变成全宽并
+       相互重叠。这里让本面板动态抬升到推荐关系面板顶部之上，固定留 10px 间隔；
+       桌面端两面板分居左右，不重叠，恢复 CSS 默认 bottom:52px。
+       监听 ResizeObserver：推荐面板展开/折叠、内容变化都会触发重排。 */
+    function layoutStack() {
+      var ref = document.getElementById('ref-panel');
+      if (!ref) return;
+      var mobile = window.innerWidth <= 560;
+      if (!mobile) {
+        el.style.bottom = '';
+        return;
+      }
+      // ref-panel 自身在移动端 bottom:56px，返回主页按钮再在它下面。
+      var refBottom = 56;
+      var top = refBottom + ref.offsetHeight + 10;
+      el.style.bottom = top + 'px';
+    }
+
+    var refPanelNow = document.getElementById('ref-panel');
+    if (refPanelNow && typeof ResizeObserver === 'function') {
+      new ResizeObserver(layoutStack).observe(refPanelNow);
+    }
+    window.addEventListener('resize', layoutStack);
+    layoutStack();
 
     render('');
   }
