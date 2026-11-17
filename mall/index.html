@@ -1,0 +1,935 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>EcoMall</title>
+    <link rel="stylesheet" href="./css/style.css?v=20261107b" />
+    <link rel="stylesheet" href="./css/diag.css?v=20261107b" />
+    <script src="./js/ethers.umd.min.js"></script>
+  </head>
+  <body data-i18n-title-key="app.title.mall">
+    <header>
+      <h1>EcoMall</h1>
+      <nav>
+        <a href="./index.html" aria-current="page" data-i18n="nav.mall"></a>
+        <a href="./merchant.html" data-i18n="nav.merchant"></a>
+        <a href="./admin.html" data-i18n="nav.admin"></a>
+      </nav>
+      <select id="lang" class="lang"></select>
+    </header>
+
+    <main>
+      <section class="card">
+        <h2 data-i18n="common.wallet"></h2>
+        <div class="actions">
+          <button id="connect" class="primary" data-i18n="common.connect"></button>
+          <button id="refresh" class="ghost" data-i18n="common.refresh"></button>
+        </div>
+        <div class="kv" style="margin-top: 12px">
+          <dt data-i18n="common.account"></dt><dd id="account" data-i18n="common.notConnected"></dd>
+          <dt data-i18n="wallet.token"></dt><dd id="token">—</dd>
+          <dt data-i18n="wallet.balance"></dt><dd id="balance">—</dd>
+        </div>
+        <div id="walletMsg" class="msg"></div>
+      </section>
+
+      <section class="card">
+        <h2 data-i18n="mall.title"></h2>
+        <div class="grid2">
+          <div class="field">
+            <label for="tier" data-i18n="mall.tier"></label>
+            <select id="tier"></select>
+          </div>
+          <div class="field">
+            <label for="product" data-i18n="mall.product"></label>
+            <select id="product"></select>
+          </div>
+        </div>
+
+        <div class="grid2">
+          <div class="field">
+            <label for="receiver" data-i18n="mall.receiver"></label>
+            <input id="receiver" autocomplete="name" />
+          </div>
+          <div class="field">
+            <label for="phone" data-i18n="mall.phone"></label>
+            <input id="phone" autocomplete="tel" />
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="address" data-i18n="mall.address"></label>
+          <textarea id="address" autocomplete="street-address"></textarea>
+        </div>
+
+        <div class="field">
+          <label for="note" data-i18n="mall.note"></label>
+          <input id="note" />
+        </div>
+
+        <div class="field">
+          <label data-i18n="mall.payMethod"></label>
+          <div class="actions" style="margin-top: 0">
+            <label style="display: flex; gap: 6px; align-items: center; margin: 0">
+              <input type="radio" name="pay" value="usdt" checked style="width: auto" /> USDT
+            </label>
+            <label style="display: flex; gap: 6px; align-items: center; margin: 0">
+              <input type="radio" name="pay" value="bnb" style="width: auto" /> BNB
+            </label>
+          </div>
+        </div>
+
+        <div class="notice">
+          <div data-i18n="mall.notice1"></div>
+          <div style="margin-top: 6px" data-i18n="mall.notice2"></div>
+        </div>
+
+        <div class="actions">
+          <button id="buy" class="primary" data-i18n="mall.buy"></button>
+          <button id="diag" class="ghost" data-i18n="mall.diag"></button>
+        </div>
+        <div id="buyMsg" class="msg"></div>
+        <details id="buyLogBox" class="diag">
+          <summary data-i18n="mall.log"></summary>
+          <ol id="buyLog"></ol>
+          <pre id="diagOut" class="diagout" hidden></pre>
+        </details>
+      </section>
+
+      <section class="card">
+        <h2 data-i18n="mall.orders"></h2>
+        <div id="orders" class="muted small" data-i18n="common.notConnected"></div>
+        <div id="ordersMsg" class="msg"></div>
+      </section>
+    </main>
+
+    <script type="module">
+      // ── Build stamp ───────────────────────────────────────────────────────────
+      // Every ./js/ and ./css/ URL carries ?v=20261107b. Bump that stamp in ALL pages whenever any
+      // of those files changes, so a freshly deployed HTML can never be paired with a stale module
+      // from a CDN/browser cache (that mismatch blanked the whole page: a hard import of a missing
+      // export is a link-time error).
+      import {
+        loadConfig,
+        connectWallet,
+        readProvider,
+        mallContract,
+        tokenContract,
+        registryContract,
+        setCustomRpc,
+        customRpc,
+        rpcCandidates,
+        short,
+        fmtUsd,
+        usdToToken,
+      } from "./js/chain.js?v=20261107b";
+      import { MALL_ABI, ERC20_ABI, REGISTRY_ABI } from "./js/abi.js?v=20261107b";
+      import { sealOrder, clearKeyCache } from "./js/crypto.js?v=20261107b";
+      import {
+        readOrder,
+        decryptAsBuyer,
+        allUserOrders,
+        cipherHtml,
+        plainHtml,
+        orderProductNames,
+        productLabel,
+      } from "./js/orders.js?v=20261107b";
+      import * as UI from "./js/ui.js?v=20261107b";
+      const { $, msg, busy, esc, bindCopy, withTimeout } = UI;
+      import { initLang, t, statusLabel, errorText, onLangChange } from "./js/i18n.js?v=20261107b";
+
+      let cfg;
+      let wallet;
+      let reader;
+      let products = [];
+
+      const usd = (v) => `${fmtUsd(v)} USD`;
+      // Two decimals are enough for the farming hint; exact order amounts keep full precision.
+      const usd2 = (v) => {
+        const s = fmtUsd(v);
+        const dot = s.indexOf(".");
+        return dot === -1 ? s : s.slice(0, dot + 3);
+      };
+
+      async function boot() {
+        initLang();
+        UI.mountBackHome?.();
+        try {
+          cfg = await loadConfig();
+          reader = await readProvider(cfg);
+          // Bound the first paint: with a dead RPC the page used to sit on "loading" with no error
+          // (ethers' own request timeout is 5 minutes). `reader` already fails over between the
+          // configured endpoints, so this only fires when every one of them is unusable.
+          await withTimeout(loadProducts(), 20_000, "products");
+          const d = await withTimeout(
+            tokenContract(reader, cfg, ERC20_ABI).decimals(),
+            15_000,
+            "decimals"
+          );
+          $("token").textContent = `${cfg.paymentToken.slice(0, 10)}… (${t("wallet.decimals", { n: d })})`;
+
+          // Fail loudly at load time when encryption is impossible, instead of at signature time.
+          const problem = cryptoProblem();
+          if (problem) {
+            msg("walletMsg", problem, "err");
+            $("buy").disabled = true;
+            logLine(problem, "err");
+          }
+        } catch (e) {
+          msg("walletMsg", t("common.initFailed") + errorText(e), "err");
+          logLine("init: " + describe(e), "err");
+        }
+      }
+
+      async function loadProducts() {
+        const mall = mallContract(reader, cfg, MALL_ABI);
+        const tiers = await mall.getAmountTiers();
+        const tierSel = $("tier");
+        const previous = tierSel.value; // survive a language switch without losing the choice
+        tierSel.innerHTML = "";
+        for (const v of tiers) {
+          const o = document.createElement("option");
+          o.value = String(v);
+          o.textContent = usd(v);
+          tierSel.appendChild(o);
+        }
+        if (tiers.length === 0) {
+          tierSel.innerHTML = `<option value="">${esc(t("mall.noTier"))}</option>`;
+        } else if (previous && tiers.some((v) => String(v) === previous)) {
+          tierSel.value = previous;
+        }
+        await loadProductsForTier();
+      }
+
+      async function loadProductsForTier() {
+        const mall = mallContract(reader, cfg, MALL_ABI);
+        const amount = $("tier").value;
+        const sel = $("product");
+        const previous = sel.value;
+        sel.innerHTML = "";
+        products = [];
+        if (!amount) return;
+
+        const [ids, names, suppliers, actives] = await mall.getProductsByAmountPaged(amount, 0, 100);
+        for (let i = 0; i < ids.length; i++) {
+          if (!actives[i]) continue;
+          products.push({
+            id: Number(ids[i]),
+            name: names[i],
+            supplier: suppliers[i],
+            amountUsd: BigInt(amount),
+          });
+          const o = document.createElement("option");
+          o.value = String(products.length - 1);
+          o.textContent = `#${ids[i]} ${names[i]}`;
+          sel.appendChild(o);
+        }
+        if (products.length === 0) {
+          sel.innerHTML = `<option value="">${esc(t("mall.noProduct"))}</option>`;
+        } else if (previous && products[Number(previous)]) {
+          sel.value = previous;
+        }
+
+        // Warm the envelope inputs now, so the click handler only has to ask the wallet to sign.
+        const chosen = products[Number(sel.value || 0)];
+        if (chosen && cfg) {
+          prefetchKeys(chosen.supplier).catch((e) => logLine("prefetch: " + describe(e), "err"));
+        }
+      }
+
+      async function connect() {
+        busy($("connect"), true, t("common.connecting"));
+        try {
+          wallet = await connectWallet(cfg);
+          $("account").textContent = short(wallet.account);
+          msg("walletMsg", t("common.connected"), "ok");
+
+          const chosen = products[Number($("product").value || 0)];
+          if (chosen) {
+            prefetchKeys(chosen.supplier, { force: true }).catch((e) =>
+              logLine("prefetch: " + describe(e), "err")
+            );
+          }
+          await refreshBalance();
+          await loadMyOrders();
+        } catch (e) {
+          msg("walletMsg", errorText(e), "err");
+        } finally {
+          busy($("connect"), false);
+        }
+      }
+
+      async function refreshBalance() {
+        if (!wallet) return;
+        const token = tokenContract(reader, cfg, ERC20_ABI);
+        const bal = await token.balanceOf(wallet.account);
+        $("balance").textContent = `${ethers.formatUnits(bal, await token.decimals())} USDT`;
+      }
+
+      // Timeouts: a wallet that never resolves a prompt, or an RPC that never answers, would otherwise
+      // leave the button stuck on "processing" with no error. Each step is bounded and named, so a
+      // failure says exactly where it stopped.
+      const T_SIGN_MS = 90_000; // a signature that has not arrived in 90s is not going to arrive
+      const T_TX_MS = 120_000;
+      const T_MINE_MS = 240_000;
+
+      // ── envelope inputs, prefetched ───────────────────────────────────────
+      // `sealOrder` needs the supplier key, the admin key set and the buyer key version. Fetching
+      // them inside the click handler meant 4–6 RPC round trips between the user pressing "buy" and
+      // the wallet being asked to sign. Some wallets drop a signature request that arrives seconds
+      // after the gesture, which is exactly "I clicked and nothing happened". They are therefore
+      // fetched when the product is selected, so the click path is: sign -> simulate -> send.
+      const keyCache = new Map();
+      const KEY_TTL_MS = 120_000;
+
+      async function fetchKeys(supplier) {
+        const mall = mallContract(reader, cfg, MALL_ABI);
+        const [merchantVersion, merchantSpki] = await mall.getCurrentMerchantKey(supplier);
+        if (Number(merchantVersion) === 0 || merchantSpki === "0x") {
+          throw new Error(t("mall.merchantNoKey"));
+        }
+        const adminIds = await mall.getActiveAdminKeys();
+        if (adminIds.length === 0) throw new Error(t("mall.noAdminKey"));
+
+        const adminKeys = [];
+        for (const id of adminIds) {
+          const [, , , revoked, , spki] = await mall.getAdminKey(id);
+          if (!revoked) adminKeys.push({ keyId: Number(id), spki: ethers.getBytes(spki) });
+        }
+        if (adminKeys.length === 0) throw new Error(t("mall.noUsableAdminKey"));
+
+        const buyerKeyId = wallet ? Number(await mall.buyerKeyVersion(wallet.account)) : 0;
+        return {
+          merchantKeyId: Number(merchantVersion),
+          merchantSpki: ethers.getBytes(merchantSpki),
+          adminKeys,
+          buyerKeyId,
+          at: Date.now(),
+        };
+      }
+
+      async function prefetchKeys(supplier, { force = false } = {}) {
+        if (!cfg || !supplier) return null;
+        const k = String(supplier).toLowerCase();
+        const hit = keyCache.get(k);
+        if (!force && hit && Date.now() - hit.at < KEY_TTL_MS) return hit;
+        try {
+          const fresh = await fetchKeys(supplier);
+          keyCache.set(k, fresh);
+          return fresh;
+        } catch (e) {
+          keyCache.delete(k);
+          throw e;
+        }
+      }
+
+      async function buildEnvelope(product) {
+        // Cache hit is the normal path; the fetch below only runs if the prefetch failed or expired.
+        let keys = keyCache.get(String(product.supplier).toLowerCase());
+        if (!keys || Date.now() - keys.at >= KEY_TTL_MS) {
+          step(t("mall.preparing"));
+          keys = await traced("keys", withTimeout(prefetchKeys(product.supplier, { force: true }), T_TX_MS, "keys"));
+        }
+        // The buyer key version belongs to the connected account, so refresh it cheaply.
+        // Bounded: an unresponsive RPC here used to stall the click with no timeout at all.
+        if (wallet) {
+          const mall = mallContract(reader, cfg, MALL_ABI);
+          keys = {
+            ...keys,
+            buyerKeyId: Number(
+              await withTimeout(mall.buyerKeyVersion(wallet.account), T_TX_MS, "buyerKeyVersion")
+            ),
+          };
+        }
+
+        return sealOrder({
+          fields: {
+            receiver: $("receiver").value.trim(),
+            phone: $("phone").value.trim(),
+            address: $("address").value.trim(),
+            note: $("note").value.trim(),
+          },
+          buyer: { signer: wallet.signer, account: wallet.account, keyId: keys.buyerKeyId },
+          merchantSpki: keys.merchantSpki,
+          merchantKeyId: keys.merchantKeyId,
+          adminKeys: keys.adminKeys,
+          chainId: cfg.chainId,
+          mall: cfg.mall,
+          productId: product.id,
+          supplier: product.supplier,
+        });
+      }
+
+      // ── visible step log ──────────────────────────────────────────────────
+      // Every step is appended with a timestamp and its outcome, so "the signature appeared and then
+      // nothing happened" can never happen silently again.
+      const logList = $("buyLog");
+
+      function logLine(text, kind = "info") {
+        if (!logList) return;
+        const li = document.createElement("li");
+        li.className = kind;
+        const time = new Date().toISOString().slice(11, 19);
+        li.textContent = `${time}  ${text}`;
+        logList.appendChild(li);
+        console.info("[buy]", text);
+      }
+
+      function step(text) {
+        msg("buyMsg", t("mall.step", { step: text }), "info");
+        logLine(text);
+      }
+
+      function stepDone(text) {
+        logLine(`${text} — ${t("mall.stepDone")}`, "ok");
+      }
+
+      function stepFail(text, e) {
+        logLine(`${text} — ${t("mall.stepFailed")}: ${describe(e)}`, "err");
+      }
+
+      /** Compact, non-empty description of anything thrown. */
+      function describe(e) {
+        if (!e) return "unknown error";
+        const parts = [e.name, e.shortMessage || e.reason || e.message || String(e)];
+        if (e.code !== undefined) parts.push("code=" + e.code);
+        if (e.info && e.info.error && e.info.error.message) parts.push(e.info.error.message);
+        return parts.filter(Boolean).join(" | ");
+      }
+
+      // Uncaught failures must reach the log too: a rejected promise inside a wallet callback would
+      // otherwise disappear into the console.
+      globalThis.addEventListener?.("error", (ev) => {
+        logLine("window.error: " + describe(ev.error || ev.message), "err");
+      });
+      globalThis.addEventListener?.("unhandledrejection", (ev) => {
+        logLine("unhandledrejection: " + describe(ev.reason), "err");
+      });
+
+      /** Wraps a named step so its outcome is logged either way. */
+      async function traced(label, promise) {
+        try {
+          const out = await promise;
+          stepDone(label);
+          return out;
+        } catch (e) {
+          stepFail(label, e);
+          throw e;
+        }
+      }
+
+      // ── environment diagnostics ───────────────────────────────────────────
+      async function runDiagnostics() {
+        const out = $("diagOut");
+        out.hidden = false;
+        const lines = [];
+        const add = (k, v) => lines.push(`${k}: ${v}`);
+
+        add("time", new Date().toISOString());
+        add("url", location.href);
+        add("secureContext", String(globalThis.isSecureContext));
+        add("crypto.subtle", String(!!(globalThis.crypto && globalThis.crypto.subtle)));
+        add("CompressionStream", String(typeof CompressionStream !== "undefined"));
+        try {
+          new CompressionStream("deflate-raw");
+          add("deflate-raw", "supported");
+        } catch (e) {
+          add("deflate-raw", "NOT supported (" + describe(e) + ")");
+        }
+        add("DecompressionStream", String(typeof DecompressionStream !== "undefined"));
+        add("ethers", globalThis.ethers ? globalThis.ethers.version || "loaded" : "MISSING");
+        add("wallet", globalThis.ethereum ? "injected" : "MISSING");
+        if (globalThis.ethereum) {
+          const eth = globalThis.ethereum;
+          const kinds = [];
+          if (eth.isMetaMask) kinds.push("MetaMask");
+          if (eth.isTokenPocket) kinds.push("TokenPocket");
+          if (eth.isTrust) kinds.push("Trust");
+          if (eth.isImToken) kinds.push("imToken");
+          if (eth.isCoinbaseWallet) kinds.push("Coinbase");
+          if (eth.isRabby) kinds.push("Rabby");
+          add("wallet.providers", kinds.length ? kinds.join(",") : "unknown");
+          add(
+            "wallet.signTypedData",
+            wallet && typeof wallet.signer.signTypedData === "function" ? "yes" : "no"
+          );
+          add("wallet.signMessage", wallet && typeof wallet.signer.signMessage === "function" ? "yes" : "no");
+        }
+        add("config.chainId", cfg ? cfg.chainId : "no config");
+        add("config.mall", cfg ? cfg.mall : "no config");
+
+        try {
+          if (globalThis.ethereum) {
+            const net = await new ethers.BrowserProvider(globalThis.ethereum).getNetwork();
+            add("wallet.chainId", String(net.chainId));
+          }
+        } catch (e) {
+          add("wallet.chainId", "error: " + describe(e));
+        }
+
+        if (wallet) {
+          add("account", wallet.account);
+          try {
+            const bal = await wallet.provider.getBalance(wallet.account);
+            add("bnb", ethers.formatEther(bal));
+          } catch (e) {
+            add("bnb", "error: " + describe(e));
+          }
+          if (cfg) {
+            try {
+              const token = tokenContract(reader, cfg, ERC20_ABI);
+              const [d, b, a] = await Promise.all([
+                token.decimals(),
+                token.balanceOf(wallet.account),
+                token.allowance(wallet.account, cfg.mall),
+              ]);
+              add("usdt.decimals", String(d));
+              add("usdt.balance", ethers.formatUnits(b, d));
+              add("usdt.allowance", ethers.formatUnits(a, d));
+            } catch (e) {
+              add("usdt", "error: " + describe(e));
+            }
+          }
+        }
+
+        if (cfg) {
+          try {
+            const mall = mallContract(reader, cfg, MALL_ABI);
+            const [pc, paused, ids] = await Promise.all([
+              mall.productCount(),
+              mall.paused(),
+              mall.getActiveAdminKeys(),
+            ]);
+            add("mall.productCount", String(pc));
+            add("mall.paused", String(paused));
+            add("mall.adminKeys", ids.map(String).join(","));
+            if (products.length > 0) {
+              const p = products[0];
+              const [v, spki] = await mall.getCurrentMerchantKey(p.supplier);
+              add("merchant.keyVersion", String(v));
+              add("merchant.spkiBytes", String(ethers.getBytes(spki).length));
+            }
+          } catch (e) {
+            add("mall", "error: " + describe(e));
+          }
+        }
+
+        out.textContent = lines.join("\n");
+        logLine("diagnostics written to the panel below", "ok");
+      }
+
+      /**
+       * WebCrypto is the one hard prerequisite for an encrypted order, and it is only exposed in a
+       * secure context (https, http://localhost, or a packaged app). On plain http over a LAN IP —
+       * or on file:// — `crypto.subtle` is undefined, and the failure used to surface only AFTER the
+       * wallet signature had already been requested, which looked like "I signed and nothing
+       * happened". Checked before every prompt instead.
+       */
+      function cryptoProblem() {
+        if (!globalThis.isSecureContext) return t("mall.insecure");
+        if (!globalThis.crypto || !globalThis.crypto.subtle) return t("mall.noSubtle");
+        return null;
+      }
+
+      function assertCrypto() {
+        const problem = cryptoProblem();
+        if (problem) throw new Error(problem);
+      }
+
+      async function assertChain() {
+        if (!globalThis.ethereum) return;
+        const net = await withTimeout(
+          new ethers.BrowserProvider(globalThis.ethereum).getNetwork(),
+          15_000,
+          "network"
+        );
+        if (Number(net.chainId) !== Number(cfg.chainId)) {
+          throw new Error(
+            t("mall.wrongChain", { want: cfg.chainId, have: Number(net.chainId) })
+          );
+        }
+      }
+
+      // The flow asks the wallet for exactly three things, in this order:
+      //   USDT  -> 1) approve  2) sign (encrypt)  3) place order
+      //   BNB   ->              1) sign (encrypt)  2) place order
+      // Before step 3 the order is simulated with `staticCall`, so a revert is reported without
+      // making the user sign a transaction that was always going to fail.
+      async function buy() {
+        const btn = $("buy");
+        busy(btn, true, t("common.processing"));
+        try {
+          if (!wallet) throw new Error(t("common.pleaseConnect"));
+          const idx = $("product").value;
+          if (idx === "") throw new Error(t("mall.selectProduct"));
+          const product = products[Number(idx)];
+
+          const receiver = $("receiver").value.trim();
+          const phone = $("phone").value.trim();
+          const address = $("address").value.trim();
+          if (!receiver || !phone || !address) throw new Error(t("mall.fillPII"));
+
+          assertCrypto(); // before any wallet prompt: a signature we cannot use is a wasted signature
+          step(t("common.loading"));
+          await assertChain();
+
+          const pay = document.querySelector('input[name="pay"]:checked').value;
+          const mall = mallContract(wallet.signer, cfg, MALL_ABI);
+
+          // ── USDT: balance check, then approve BEFORE the signature ──────
+          let tokenAmount = 0n;
+          if (pay === "usdt") {
+            const token = tokenContract(wallet.signer, cfg, ERC20_ABI);
+            const decimals = await withTimeout(token.decimals(), T_TX_MS, "decimals");
+            tokenAmount = usdToToken(product.amountUsd, decimals);
+
+            const bal = await withTimeout(token.balanceOf(wallet.account), T_TX_MS, "balanceOf");
+            if (bal < tokenAmount) {
+              throw new Error(
+                t("mall.needUsdt", {
+                  need: ethers.formatUnits(tokenAmount, decimals),
+                  have: ethers.formatUnits(bal, decimals),
+                })
+              );
+            }
+
+            const allowance = await withTimeout(
+              token.allowance(wallet.account, cfg.mall),
+              T_TX_MS,
+              "allowance"
+            );
+            if (allowance < tokenAmount) {
+              step(t("mall.approve"));
+              const ap = await withTimeout(
+                token.approve(cfg.mall, ethers.MaxUint256),
+                T_TX_MS,
+                "approve"
+              );
+              await withTimeout(ap.wait(), T_MINE_MS, "approve-mine");
+            }
+          }
+
+          // ── signature: derives the buyer key and seals the shipping record ──
+          step(t("mall.signToEncrypt"));
+          const payload = await traced(
+            "seal",
+            withTimeout(buildEnvelope(product), T_SIGN_MS, "sign")
+          );
+          const payloadHex = ethers.hexlify(payload);
+
+          // ── BNB: quote after the signature, it does not need one ────────
+          let cap = 0n;
+          if (pay !== "usdt") {
+            const quote = await withTimeout(
+              mall.quoteBnbForUsd(product.amountUsd),
+              T_TX_MS,
+              "quote"
+            );
+            cap = (quote * 105n) / 100n;
+            if ((await withTimeout(wallet.provider.getBalance(wallet.account), T_TX_MS, "bnb")) < cap) {
+              throw new Error(t("mall.insufficientBnb"));
+            }
+          }
+
+          // ── simulate, so a revert never reaches the wallet prompt ───────
+          step(t("mall.checking"));
+          try {
+            if (pay === "usdt") {
+              await traced(
+                "simulate",
+                withTimeout(
+                  mall.placeOrder.staticCall(product.id, product.amountUsd, payloadHex),
+                  T_TX_MS,
+                  "simulate"
+                )
+              );
+            } else {
+              await traced(
+                "simulate",
+                withTimeout(
+                  mall.placeOrderWithBNB.staticCall(product.id, product.amountUsd, cap, payloadHex, {
+                    value: cap,
+                  }),
+                  T_TX_MS,
+                  "simulate"
+                )
+              );
+            }
+          } catch (e) {
+            throw new Error(t("mall.simulateFailed") + errorText(e));
+          }
+
+          // ── send ────────────────────────────────────────────────────────
+          step(t("mall.confirmOrder"));
+          let tx;
+          if (pay === "usdt") {
+            tx = await withTimeout(
+              mall.placeOrder(product.id, product.amountUsd, payloadHex),
+              T_TX_MS,
+              "placeOrder"
+            );
+          } else {
+            tx = await withTimeout(
+              mall.placeOrderWithBNB(product.id, product.amountUsd, cap, payloadHex, { value: cap }),
+              T_TX_MS,
+              "placeOrderWithBNB"
+            );
+          }
+
+          step(t("mall.waiting"));
+          await withTimeout(tx.wait(), T_MINE_MS, "mine");
+
+          msg("buyMsg", t("mall.placed"), "ok");
+          await refreshBalance();
+          await loadMyOrders();
+        } catch (e) {
+          const raw = String(e && e.message ? e.message : e);
+          const m = raw.match(/^TIMEOUT:([^:]+):(\d+)$/);
+          const code = e?.code ?? e?.info?.error?.code;
+          if (m && m[1] === "sign") {
+            // The wallet never answered: distinct from a user rejection and far more actionable.
+            msg("buyMsg", t("mall.walletNoResponse", { sec: m[2] }), "err");
+            logLine("wallet did not answer the signature request", "err");
+          } else if (m) {
+            msg("buyMsg", t("mall.timeout", { step: m[1], sec: m[2] }), "err");
+          } else if (code === 4001) {
+            msg("buyMsg", t("mall.walletRejected"), "err");
+          } else {
+            msg("buyMsg", t("mall.buyFailed") + errorText(e), "err");
+          }
+        } finally {
+          busy(btn, false);
+        }
+      }
+
+      async function loadMyOrders() {
+        if (!wallet) return;
+        const box = $("orders");
+        box.textContent = t("common.loading");
+        try {
+          const registry = registryContract(reader, cfg, REGISTRY_ABI);
+          const orders = await allUserOrders(wallet.signer, cfg, wallet.account, registry);
+          if (orders.length === 0) {
+            box.textContent = t("common.noOrders");
+            return;
+          }
+          // `getOrderInfo` only returns the product id; resolve the names so a row says what was
+          // bought. A lookup failure degrades to `#id` instead of hiding the order.
+          const namesByMall = await orderProductNames(reader, cfg, orders).catch(() => new Map());
+          // The farming gate is a fraction of the order value (half, minus the tolerance), never the
+          // order amount. Showing only "awaiting farming" next to "150 USD" reads as "needs 150
+          // USD of farming", so the real requirement and the buyer's current credit are printed.
+          const gate = new Map();
+          await Promise.all(
+            orders
+              .filter((o) => o.status === 0)
+              .map(async (o) => {
+                const mallAddr = o.mall || cfg.mall;
+                const local =
+                  mallAddr.toLowerCase() === cfg.mall.toLowerCase()
+                    ? cfg
+                    : { ...cfg, mall: mallAddr };
+                try {
+                  const mall = mallContract(reader, local, MALL_ABI);
+                  const p = await withTimeout(
+                    mall.unlockProgress(o.id),
+                    T_TX_MS,
+                    "unlockProgress"
+                  );
+                  gate.set(o.id, {
+                    need: usd2(p.requiredFarmUsd),
+                    have: usd2(p.credit),
+                    ok: Boolean(p.unlocked),
+                  });
+                } catch {
+                  // Older mall versions have no unlockProgress; the row just omits the hint.
+                }
+              })
+          );
+
+          box.innerHTML = orders
+            .slice()
+            .reverse()
+            .map((o) => {
+              const g = o.status === 0 ? gate.get(o.id) : null;
+              const gateHtml = g
+                ? `<div class="muted small" data-gate>${esc(
+                    t("mall.unlockNeed", { need: g.need, have: g.have })
+                  )}${g.ok ? " · " + esc(t("mall.unlockReady")) : ""}</div>`
+                : "";
+              // AWAIT_FARM + eligible: one button decrypts and unlocks. Unlocking is a transaction
+              // (gas, wallet confirm) while decrypting is a free signature, so the plain decrypt
+              // stays available for buyers who only want to read their own address back.
+              const primary =
+                o.status !== 0
+                  ? ""
+                  : g && g.ok
+                    ? `<button class="primary" data-decrypt-unlock="${o.id}">${esc(
+                        t("mall.decryptAndUnlock")
+                      )}</button>`
+                    : `<button class="primary" data-unlock="${o.id}">${esc(t("mall.unlock"))}</button>`;
+              return (
+                `<div class="order" data-id="${o.id}" data-mall="${esc(o.mall || cfg.mall)}">` +
+                `<div class="row"><b>#${o.id}</b><span class="tag">${esc(statusLabel(o.status))}</span>` +
+                `<span class="muted">${usd(o.amountUsd)}</span></div>` +
+                `<div class="muted small">${esc(
+                  t("mall.orderMeta", {
+                  product: productLabel(
+                    o.productId,
+                    namesByMall.get(String(o.mall || cfg.mall).toLowerCase())
+                  ),
+                  supplier: short(o.supplier),
+                })
+                )}</div>` +
+                gateHtml +
+                `<div class="actions">` +
+                `<button class="ghost" data-decrypt="${o.id}">${esc(t("common.decrypt"))}</button>` +
+                primary +
+                `</div>` +
+                cipherHtml(o.payload) +
+                `<div class="out small"></div></div>`
+              );
+            })
+            .join("");
+
+          box.querySelectorAll("[data-decrypt]").forEach((b) => {
+            b.onclick = () => decryptOrder(Number(b.dataset.decrypt), b.closest(".order"));
+          });
+          box.querySelectorAll("[data-decrypt-unlock]").forEach((b) => {
+            b.onclick = () =>
+              decryptOrder(Number(b.dataset.decryptUnlock), b.closest(".order"), { unlock: true });
+          });
+          box.querySelectorAll("[data-unlock]").forEach((b) => {
+            b.onclick = () => unlockOrder(Number(b.dataset.unlock), b);
+          });
+          bindCopy(box);
+        } catch (e) {
+          box.textContent = t("common.readFailed") + errorText(e);
+        }
+      }
+
+      /**
+       * Decrypts the buyer's own copy of the shipping record.
+       *
+       * `unlock: true` also releases the order to the supplier (status AWAIT_FARM -> AWAIT_SHIP).
+       * The plaintext is rendered first: the unlock is a gas transaction and must never be able to
+       * hide the address the buyer just paid a signature to read. On success the row is patched in
+       * place instead of re-rendering the list, so the plaintext stays on screen.
+       */
+      async function decryptOrder(id, node, { unlock = false } = {}) {
+        const out = node.querySelector(".out");
+        out.textContent = t("common.confirmSignature");
+        let local = cfg;
+        let needUnlock = unlock;
+        try {
+          const mallAddr = node.dataset.mall || cfg.mall;
+          local =
+            mallAddr.toLowerCase() === cfg.mall.toLowerCase() ? cfg : { ...cfg, mall: mallAddr };
+          const order = await readOrder(wallet.signer, local, id);
+          if (order.status !== 0) needUnlock = false;
+          const rec = await decryptAsBuyer({
+            signer: wallet.signer,
+            account: wallet.account,
+            blob: order.payload,
+            order,
+            cfg: local,
+          });
+          out.innerHTML = plainHtml(rec);
+        } catch (e) {
+          // A failed decryption (wrong account, rotated buyer key, old envelope) must not block the
+          // unlock: the supplier still needs the address, and the buyer can retry decrypting later.
+          out.textContent = t("common.decryptFailed") + errorText(e);
+        }
+        if (!needUnlock) return;
+
+        // ── unlock: the supplier only sees the address after this transaction ──
+        try {
+          const mall = mallContract(wallet.signer, local, MALL_ABI);
+          const p = await withTimeout(mall.unlockProgress(id), T_TX_MS, "unlockProgress");
+          if (!p.unlocked) {
+            msg(
+              "ordersMsg",
+              t("mall.unlockNeed", { need: usd2(p.requiredFarmUsd), have: usd2(p.credit) }),
+              "err"
+            );
+            return;
+          }
+          msg("ordersMsg", t("mall.autoUnlockPending"), "info");
+          const tx = await withTimeout(mall.unlockOrder(id), T_TX_MS, "unlockOrder");
+          await withTimeout(tx.wait(), T_MINE_MS, "unlock-mine");
+          markUnlocked(node);
+          msg("ordersMsg", t("mall.unlocked", { id }), "ok");
+        } catch (e) {
+          console.warn("[unlock]", describe(e));
+          msg("ordersMsg", t("mall.unlockFailed") + errorText(e), "err");
+        }
+      }
+
+      /** Patches one rendered row after a successful unlock, keeping any decrypted plaintext. */
+      function markUnlocked(node) {
+        const tag = node.querySelector(".tag");
+        if (tag) tag.textContent = statusLabel(1);
+        node.querySelector("[data-gate]")?.remove();
+        node.querySelectorAll("[data-unlock],[data-decrypt-unlock]").forEach((b) => b.remove());
+      }
+
+      async function unlockOrder(id, button) {
+        busy(button, true, t("mall.unlocking"));
+        try {
+          const mall = mallContract(wallet.signer, cfg, MALL_ABI);
+          await (await mall.unlockOrder(id)).wait();
+          msg("ordersMsg", t("mall.unlocked", { id }), "ok");
+          await loadMyOrders();
+        } catch (e) {
+          msg("ordersMsg", t("mall.unlockFailed") + errorText(e), "err");
+          busy(button, false);
+        }
+      }
+
+      $("connect").onclick = connect;
+      $("refresh").onclick = async () => {
+        // Re-boot when the first load failed (e.g. every RPC was down): a bare loadProducts() would
+        // throw on the missing provider and leave the page stuck.
+        if (!cfg || !reader) return boot();
+        try {
+          await loadProducts();
+          await refreshBalance();
+          await loadMyOrders();
+        } catch (e) {
+          msg("walletMsg", t("common.initFailed") + errorText(e), "err");
+        }
+      };
+      $("tier").onchange = loadProductsForTier;
+      $("buy").onclick = buy;
+      $("diag").onclick = () => runDiagnostics().catch((e) => stepFail("diagnostics", e));
+
+      // Re-render dynamic content on a language switch; static nodes are handled by applyI18n.
+      onLangChange(async () => {
+        if (!cfg) return;
+        await loadProducts();
+        if (wallet) await loadMyOrders();
+      });
+
+      globalThis.addEventListener?.("ecomall:disconnect", () => clearKeyCache());
+
+      // Support escape hatch. If every configured endpoint is blocked on a user's network, running
+      //   ecomall.setRpc("https://their-rpc.example")
+      // in the console switches the read provider and reloads. `ecomall.rpcs()` lists the candidates.
+      globalThis.ecomall = {
+        setRpc(url) {
+          setCustomRpc(url);
+          location.reload();
+        },
+        rpc() {
+          return customRpc() || (cfg && cfg.rpcUrl) || "";
+        },
+        rpcs() {
+          return cfg ? rpcCandidates(cfg) : [];
+        },
+      };
+
+      boot();
+    </script>
+</body>
+</html>

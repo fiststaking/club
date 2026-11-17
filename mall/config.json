@@ -1,16 +1,16 @@
 {
   "chainId": 56,
-  "mall": "0x8f5290FCda051f71122eD34cFc6e629517352093",
-  "registry": "0x6e41606736c57f47396FCa60a8068c3eA9f63025",
-  "merchantModule": "0x16e3339370a4E47626189439D353d831E17dcD9a",
+  "mall": "0x44e664db1b3c6A626274BD15E90a947AEe583961",
+  "registry": "0x67F04dA49D6C04a325B6D61e9988774363c4aA3a",
+  "merchantModule": "0xd9ab0255fcb6aa3Eddfc9fE868Fe62A426Db06A2",
   "paymentToken": "0x55d398326f99059fF775485246999027B3197955",
   "explorer": "https://bscscan.com",
-  "rpcUrl": "https://bsc.blockrazor.xyz",
+  "rpcUrl": "https://bsc-dataseed.binance.org",
   "rpcUrls": [
-    "https://bsc.blockrazor.xyz",
-    "https://bsc-dataseed.bnbchain.org",
-    "https://bsc.nodereal.io",
+    "https://bsc-dataseed.binance.org",
     "https://bsc-rpc.publicnode.com",
-    "https://1rpc.io/bnb"
+    "https://1rpc.io/bnb",
+    "https://bsc.blockrazor.xyz",
+    "https://bsc.nodereal.io"
   ]
 }
