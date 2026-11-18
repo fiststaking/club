@@ -1,8 +1,8 @@
 {
   "chainId": 56,
-  "mall": "0x44e664db1b3c6A626274BD15E90a947AEe583961",
-  "registry": "0x67F04dA49D6C04a325B6D61e9988774363c4aA3a",
-  "merchantModule": "0xd9ab0255fcb6aa3Eddfc9fE868Fe62A426Db06A2",
+  "mall": "0x230b7BD7F72dC1236baB161F71D3Eb0Dd9b06889",
+  "registry": "0x69164D8756d755eed154432ac4FFb673113a58E6",
+  "merchantModule": "0x87C5d481A3219a7516A22606211F3D14DA467352",
   "paymentToken": "0x55d398326f99059fF775485246999027B3197955",
   "explorer": "https://bscscan.com",
   "rpcUrl": "https://bsc-dataseed.binance.org",
